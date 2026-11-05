@@ -237,13 +237,21 @@ class Builder:
             command += ['--offline']
         self.run(command + list(tasks), name=name)
 
+    def apply_source_patch(self, source: Path, patch: Path):
+        # A staged tree may live below the setup repository. Without its own .git,
+        # git apply discovers that parent and can silently skip every patch path.
+        self.run(['git', 'init', '--quiet', source], name='patch-isolate')
+        self.run(['git', 'apply', '--check', patch], cwd=source, name='hidden-points-check')
+        self.run(['git', 'apply', patch], cwd=source, name='hidden-points-patch')
+
     def build(self):
         self.toolchain()
         self.prepare_sources()
         patch = HERE / 'patches/hidden-points.patch'
         # Apply inside the disposable source copy; original checkouts remain untouched.
-        self.run(['git', 'apply', '--check', patch], cwd=self.work / 'GeoGen', name='hidden-points-check')
-        self.run(['git', 'apply', patch], cwd=self.work / 'GeoGen', name='hidden-points-patch')
+        self.apply_source_patch(self.work / 'GeoGen', patch)
+        if not (self.work / 'GeoGen/Source/Launchers/GeoGen.MainLauncher/Examples/Inputs/input_hidden_points.txt').is_file():
+            raise BuildError('Патч HiddenPoints не создал контрольный пример; сборка остановлена.')
         if self.stage.exists():
             shutil.rmtree(self.stage)
         self.stage.mkdir()

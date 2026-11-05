@@ -3,6 +3,8 @@ import json
 from pathlib import Path
 import sys
 import tempfile
+import subprocess
+import types
 import unittest
 from unittest.mock import patch
 
@@ -89,6 +91,27 @@ class BuilderSafetyTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'пустым'):
                 runtime.convert(root / 'input.txt', out)
             self.assertEqual((out / 'a.geo').read_text(), 'valuable')
+
+    def test_patch_applies_inside_a_parent_git_repository(self):
+        # This is the layout of a real clone: setup/.builder/work/GeoGen.
+        with tempfile.TemporaryDirectory() as directory:
+            outer = Path(directory)
+            subprocess.run(['git', 'init', '--quiet', str(outer)], check=True)
+            stage = outer / '.builder/work/GeoGen'
+            (stage / 'Source').mkdir(parents=True)
+            original = stage / 'Source/probe.txt'
+            original.write_text('old\n')
+            patch_file = outer / 'feature.patch'
+            patch_file.write_text('diff --git a/Source/probe.txt b/Source/probe.txt\n'
+                                  '--- a/Source/probe.txt\n+++ b/Source/probe.txt\n'
+                                  '@@ -1 +1 @@\n-old\n+new\n')
+            args = types.SimpleNamespace(state=outer / 'state', jobs=1)
+            instance = builder.Builder(args)
+            instance.apply_source_patch(stage, patch_file)
+            self.assertEqual(original.read_text(), 'new\n')
+            actual_root = subprocess.check_output(['git', '-C', str(stage), 'rev-parse', '--show-toplevel'], text=True).strip()
+            self.assertEqual(Path(actual_root).resolve(), stage.resolve())
+            self.assertFalse((outer / 'Source/probe.txt').exists())
 
     def test_proxy_userinfo_never_enters_command_arguments(self):
         with self.assertRaisesRegex(builder.BuildError, 'credentials'):
