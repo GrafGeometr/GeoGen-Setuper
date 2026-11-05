@@ -165,6 +165,14 @@ EqualLineSegments: A, D, D, B - total ranking 1
     hidden_log = (hidden_job / 'geogen.log').read_text()
     if not re.search(r"Generated configurations: 1(?:\r?\n|$)", hidden_log):
         raise RuntimeError('HiddenPoints did not restrict the full GeoGen pipeline to one configuration.')
+    from streaming import run_stream
+    import sqlite3
+    live_job = run_stream(ROOT / 'examples/input_projections.txt', output / 'stream-job', timeout=120)
+    with sqlite3.connect(live_job / 'tasks.sqlite') as db:
+        ready = db.execute("SELECT count(*) FROM tasks WHERE state='ready'").fetchone()[0]
+        pending = db.execute("SELECT count(*) FROM tasks WHERE state IN ('queued','processing')").fetchone()[0]
+    if ready < 1 or pending:
+        raise RuntimeError('Поток не выдал проверенных задач или не завершил очередь.')
     if not VIEWER.is_file():
         raise RuntimeError('Не найден launcher Geometry.')
     print('SMOKE OK: GeoGen → JVM-конвертер → .geo; Extending на контрольных примерах; Geometry упакован.')
@@ -173,11 +181,16 @@ EqualLineSegments: A, D, D, B - total ranking 1
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest='command', required=True)
-    run = commands.add_parser('run', help='GeoGen → конвертация лучших теорем → Extending')
+    run = commands.add_parser('run', help='Поток GeoGen → Extending → .geo (либо --batch для пакетного режима)')
     run.add_argument('input', type=Path)
     run.add_argument('--output', type=Path, required=True, help='Новый каталог запуска')
     run.add_argument('--no-check', action='store_true')
-    run.add_argument('--timeout', type=int, default=3600, help='Внешний лимит секунд на стадию')
+    run.add_argument('--batch', action='store_true', help='Прежний последовательный режим: подборка лучших после завершения поиска')
+    run.add_argument('--workers', type=int, default=2, help='Параллельные обработчики находок')
+    run.add_argument('--check-ms', type=int, default=1000, help='Лимит одной проверки Extending, мс')
+    run.add_argument('--view', action='store_true', help='Сразу открыть список поступающих результатов')
+    run.add_argument('--software', action='store_true')
+    run.add_argument('--timeout', type=int, default=3600, help='Лимит поиска GeoGen в секундах; после него полученная очередь сохраняется и обрабатывается')
     conv = commands.add_parser('convert', help='Подборка ReadableBestTheorems → .geo')
     conv.add_argument('input', type=Path)
     conv.add_argument('output', type=Path)
@@ -189,10 +202,39 @@ def main():
     view.add_argument('--software', action='store_true', help='Программный рендеринг для VM/неподдерживаемого GPU')
     testing = commands.add_parser('smoke', help='Проверить сборку без графического дисплея')
     testing.add_argument('--output', type=Path, required=True)
+    watch = commands.add_parser('watch', help='Открыть пополняющийся список результатов в Geometry')
+    watch.add_argument('directory', type=Path)
+    watch.add_argument('--software', action='store_true')
+    resume = commands.add_parser('resume', help='Продолжить обработку очереди без повторного поиска GeoGen')
+    resume.add_argument('directory', type=Path)
+    resume.add_argument('--workers', type=int, default=2)
+    resume.add_argument('--retry-errors', action='store_true')
     commands.add_parser('doctor', help='Проверить комплект и динамические библиотеки')
     args = parser.parse_args()
+    if getattr(args, 'workers', 1) < 1 or getattr(args, 'workers', 1) > 64:
+        parser.error('--workers должен быть в диапазоне 1..64')
+    if not 1 <= getattr(args, 'check_ms', 1000) <= 3600000 or getattr(args, 'timeout', 1) < 1:
+        parser.error('Лимиты времени должны быть положительными; --check-ms не более 3600000')
     if args.command == 'run':
-        run_pipeline(args.input, args.output, extending=not args.no_check, timeout=args.timeout)
+        if args.software:
+            os.environ['SKIKO_RENDER_API'] = 'SOFTWARE'
+        if args.batch:
+            run_pipeline(args.input, args.output, extending=not args.no_check, timeout=args.timeout)
+        else:
+            from streaming import run_stream
+            run_stream(args.input, args.output, workers=args.workers, extending=not args.no_check,
+                       check_ms=args.check_ms, timeout=args.timeout, view=args.view)
+    elif args.command == 'resume':
+        from streaming import resume
+        resume(args.directory, workers=args.workers, retry_errors=args.retry_errors)
+    elif args.command == 'watch':
+        if not args.directory.is_dir():
+            raise RuntimeError('Нет каталога запуска: ' + str(args.directory))
+        if not (os.environ.get('DISPLAY') or os.environ.get('WAYLAND_DISPLAY')):
+            raise RuntimeError('Для Geometry нужна графическая сессия.')
+        if args.software:
+            os.environ['SKIKO_RENDER_API'] = 'SOFTWARE'
+        execute([VIEWER, '--watch', args.directory.resolve()])
     elif args.command == 'convert':
         convert(args.input, args.output)
     elif args.command == 'check':

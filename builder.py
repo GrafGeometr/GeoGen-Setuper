@@ -30,7 +30,7 @@ PACKAGES = ['python3', 'git', 'curl', 'ca-certificates', 'unzip', 'xz-utils',
             'build-essential', 'pkg-config', 'libgmp-dev', 'libffi-dev',
             'libncurses-dev', 'libnuma-dev', 'zlib1g-dev', 'libicu-dev',
             'libssl-dev', 'openjdk-17-jdk', 'libx11-6', 'libxext6', 'libxi6',
-            'libxrender1', 'libxtst6', 'libgl1', 'libfontconfig1', 'libfreetype6']
+            'libxrender1', 'libxtst6', 'libgl1', 'libfontconfig1', 'libfreetype6', 'fonts-dejavu-core']
 
 
 class BuildError(RuntimeError):
@@ -240,9 +240,9 @@ class Builder:
     def apply_source_patch(self, source: Path, patch: Path):
         # A staged tree may live below the setup repository. Without its own .git,
         # git apply discovers that parent and can silently skip every patch path.
-        self.run(['git', 'init', '--quiet', source], name='patch-isolate')
-        self.run(['git', 'apply', '--check', patch], cwd=source, name='hidden-points-check')
-        self.run(['git', 'apply', patch], cwd=source, name='hidden-points-patch')
+        self.run(['git', 'init', '--quiet', source], name=patch.stem + '-isolate')
+        self.run(['git', 'apply', '--check', patch], cwd=source, name=patch.stem + '-check')
+        self.run(['git', 'apply', patch], cwd=source, name=patch.stem + '-apply')
 
     def build(self):
         self.toolchain()
@@ -252,6 +252,8 @@ class Builder:
         self.apply_source_patch(self.work / 'GeoGen', patch)
         if not (self.work / 'GeoGen/Source/Launchers/GeoGen.MainLauncher/Examples/Inputs/input_hidden_points.txt').is_file():
             raise BuildError('Патч HiddenPoints не создал контрольный пример; сборка остановлена.')
+        self.apply_source_patch(self.work / 'GeoGen', HERE / 'patches/streaming-geogen.patch')
+        self.apply_source_patch(self.work / 'GeometryExtending', HERE / 'patches/streaming-extending.patch')
         if self.stage.exists():
             shutil.rmtree(self.stage)
         self.stage.mkdir()
@@ -321,8 +323,17 @@ class Builder:
         geometry = self.work / 'Geometry'
         desktop = geometry / 'GeometryDesktop'
         write(desktop / 'src/main/kotlin/Main.kt', (HERE / 'templates/desktop-main.kt').read_text())
+        write(desktop / 'src/main/kotlin/StreamView.kt', (HERE / 'templates/stream-view.kt').read_text())
         with (desktop / 'build.gradle.kts').open('a') as file:
             file.write('\nsourceSets { main { java.srcDir("../GeometryAndroid/app/src/main/java/com/ibis/geometry/common") } }\n')
+        write(desktop / 'src/main/kotlin/TextDrawer.kt', (HERE / 'templates/text-drawer.kt').read_text())
+        font = Path('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf')
+        if not font.is_file():
+            raise BuildError('Нужен шрифт DejaVu Sans: установите fonts-dejavu-core (команда deps).')
+        shutil.copy2(font, desktop / 'src/main/resources/DejaVuSans.ttf')
+        license_file = Path('/usr/share/doc/fonts-dejavu-core/copyright')
+        if license_file.is_file():
+            shutil.copy2(license_file, desktop / 'src/main/resources/DejaVuSans-LICENSE.txt')
         self.gradle_run(desktop, 'build', 'createDistributable', name='geometry-build')
         shutil.copytree(desktop / 'build/compose/binaries/main/app/Geometry Desktop',
                         self.stage / 'lib/geometry')
@@ -339,13 +350,15 @@ class Builder:
                   '--strip-debug', '--no-header-files', '--no-man-pages', '--compress=2',
                   '--output', self.stage / 'lib/java'], name='converter-jre')
         shutil.copy2(HERE / 'runtime.py', self.stage / 'runtime.py')
+        shutil.copy2(HERE / 'streaming.py', self.stage / 'streaming.py')
         write(self.stage / 'geometry-suite', '#!/bin/sh\nset -eu\nsuite_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)\nexec python3 "$suite_dir/runtime.py" "$@"\n', True)
         write(self.stage / 'BUILD.json', json.dumps({
             'built_at_utc': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
             'platform': platform.platform(), 'sources': self.manifest,
             'dotnet_sdk': DOTNET_VERSION, 'ghc': GHC_VERSION,
             'gradle': GRADLE_VERSION, 'jdk': '17',
-            'patches': ['HiddenPoints input, generation restriction and symmetry-safe deduplication',
+            'patches': ['Atomic theorem stream, structured Extending checks, live Geometry results',
+                        'HiddenPoints input, generation restriction and symmetry-safe deduplication',
                         'XDG data path and second CLI argument in desktop Main.kt',
                         'desktop common source directory', 'JVM target for original converter',
                         'threaded RTS for Extending']}, indent=2))

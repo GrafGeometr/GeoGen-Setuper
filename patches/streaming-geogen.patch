@@ -1,0 +1,83 @@
+diff --git a/Source/Launchers/GeoGen.MainLauncher/BusinessLogic/ProblemGenerationRunner/ProblemGenerationRunner.cs b/Source/Launchers/GeoGen.MainLauncher/BusinessLogic/ProblemGenerationRunner/ProblemGenerationRunner.cs
+index 85d89d9..0bb760e 100644
+--- a/Source/Launchers/GeoGen.MainLauncher/BusinessLogic/ProblemGenerationRunner/ProblemGenerationRunner.cs
++++ b/Source/Launchers/GeoGen.MainLauncher/BusinessLogic/ProblemGenerationRunner/ProblemGenerationRunner.cs
+@@ -1,4 +1,5 @@
+-﻿using GeoGen.Core;
++﻿using Newtonsoft.Json;
++using GeoGen.Core;
+ using GeoGen.ProblemAnalyzer;
+ using GeoGen.ProblemGenerator;
+ using GeoGen.ProblemGenerator.InputProvider;
+@@ -94,6 +95,10 @@ namespace GeoGen.MainLauncher
+         /// <inheritdoc/>
+         public void Run(LoadedProblemGeneratorInput input)
+         {
++            var streamSequence = 0L;
++            if (_settings.StreamingOutputFolder != null)
++                Directory.CreateDirectory(_settings.StreamingOutputFolder);
++
+             #region Prepare readable writers
+ 
+             // Prepare the name of readable output files
+@@ -293,6 +298,28 @@ namespace GeoGen.MainLauncher
+                 // Write JSON output
+                 jsonOutputWriter?.Write(analyzerOutput.InterestingTheorems);
+ 
++                // Publish each interesting finding before global ranking/merging. A consumer only
++                // sees complete *.json files; interrupted *.tmp writes can be safely ignored.
++                if (_settings.StreamingOutputFolder != null)
++                    foreach (var ranked in analyzerOutput.InterestingTheorems)
++                    {
++                        var id = $"{input.Id}_{++streamSequence:D12}";
++                        var record = RankedTheoremIntermediate.Convert(ranked);
++                        var path = Path.Combine(_settings.StreamingOutputFolder, id + ".json");
++                        var payload = JsonConvert.SerializeObject(new
++                        {
++                            schemaVersion = 1, id,
++                            discoveredAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0,
++                            configurationIndex = numberOfGeneratedConfigurations,
++                            configuration = record.ConfigurationString,
++                            theorem = record.TheoremString,
++                            ranking = ranked.Ranking.TotalRanking,
++                            readable = RankedTheoremsToString(new[] { ranked })
++                        });
++                        File.WriteAllText(path + ".tmp", payload, new System.Text.UTF8Encoding(false));
++                        File.Move(path + ".tmp", path);
++                    }
++
+                 #region Handling best theorems
+ 
+                 // If we are supposed to be handling best theorems, do so
+diff --git a/Source/Launchers/GeoGen.MainLauncher/BusinessLogic/ProblemGenerationRunner/ProblemGenerationRunnerSettings.cs b/Source/Launchers/GeoGen.MainLauncher/BusinessLogic/ProblemGenerationRunner/ProblemGenerationRunnerSettings.cs
+index a81276e..d216da9 100644
+--- a/Source/Launchers/GeoGen.MainLauncher/BusinessLogic/ProblemGenerationRunner/ProblemGenerationRunnerSettings.cs
++++ b/Source/Launchers/GeoGen.MainLauncher/BusinessLogic/ProblemGenerationRunner/ProblemGenerationRunnerSettings.cs
+@@ -108,6 +108,9 @@
+         /// </summary>
+         public bool LogProgress { get; }
+ 
++        /// <summary>Optional append-only directory of atomically published theorem events.</summary>
++        public string StreamingOutputFolder { get; }
++
+         #endregion
+ 
+         #region Constructor
+@@ -150,7 +153,8 @@
+                                                string inferenceRuleUsageFilePath,
+                                                bool writeInferenceRuleUsages,
+                                                int progressLoggingFrequency,
+-                                               bool logProgress)
++                                               bool logProgress,
++                                               string streamingOutputFolder = null)
+         {
+             ReadableOutputWithoutProofsFolder = readableOutputWithoutProofsFolder;
+             WriteReadableOutputWithoutProofs = writeReadableOutputWithoutProofs;
+@@ -170,6 +174,7 @@
+             WriteInferenceRuleUsages = writeInferenceRuleUsages;
+             ProgressLoggingFrequency = progressLoggingFrequency;
+             LogProgress = logProgress;
++            StreamingOutputFolder = streamingOutputFolder;
+ 
+             // Ensure that the output folder without proofs is set if we are supposed to use it
+             if (writeReadableOutputWithoutProofs && readableOutputWithoutProofsFolder == null)

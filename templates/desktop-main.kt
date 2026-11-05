@@ -1,5 +1,10 @@
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.material.MaterialTheme
+import androidx.compose.material.Typography
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.platform.Font
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -19,13 +24,14 @@ fun main(args: Array<String>) = application {
     val dataHome = System.getenv("XDG_DATA_HOME")?.takeIf { it.isNotBlank() }
         ?: File(System.getProperty("user.home"), ".local/share").path
     val dataDir = File(dataHome, "geometry-desktop").apply { mkdirs() }
+    val watchDir = if (args.firstOrNull() == "--watch" && args.size >= 2) File(args[1]) else null
     val inputFile = remember {
-        mutableStateOf(if (args.isNotEmpty()) File(args[0]) else File(dataDir, "input.geo"))
+        mutableStateOf(if (watchDir == null && args.isNotEmpty()) File(args[0]) else File(dataDir, "input.geo"))
     }
-    val globalFile = if (args.size >= 2) File(args[1]) else File(dataDir, "global.geo")
+    val globalFile = if (watchDir == null && args.size >= 2) File(args[1]) else File(dataDir, "global.geo")
     inputFile.value.createNewFile()
     globalFile.createNewFile()
-    val state = rememberWindowState()
+    val state = rememberWindowState(width = if (watchDir != null) 1200.dp else 800.dp, height = 800.dp)
     Window(
         onCloseRequest = ::exitApplication,
         state = state,
@@ -40,8 +46,12 @@ fun main(args: Array<String>) = application {
         }
     ) {
         GeometryTheme {
-            App(globalFile, FileManager(window, inputFile), TextDrawer,
+            val font = remember { FontFamily(Font("DejaVuSans.ttf")) }
+            MaterialTheme(typography = Typography(defaultFontFamily = font)) {
+            if (watchDir != null) StreamView(watchDir, globalFile, window, state.placement == WindowPlacement.Fullscreen)
+            else App(globalFile, FileManager(window, inputFile), TextDrawer,
                 state.placement == WindowPlacement.Fullscreen)
+            }
         }
     }
 }

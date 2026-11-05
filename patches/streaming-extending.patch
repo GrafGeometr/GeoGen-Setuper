@@ -1,0 +1,68 @@
+diff --git a/app/Main.hs b/app/Main.hs
+index 45e877d..4f60d6c 100644
+--- a/app/Main.hs
++++ b/app/Main.hs
+@@ -7,10 +7,14 @@ import Extending
+ import System.Directory (renameFile, listDirectory)
+ import Data.List (isPrefixOf, isSuffixOf)
+ import Control.Monad (forM_, unless)
+-import Control.Exception (try, SomeException)
++import Control.Exception (try, SomeException, evaluate, displayException)
+ import Control.Concurrent.MSem
+ import Control.Concurrent.Async (forConcurrently_)
+ import System.Timeout (timeout)
++import System.Exit (exitFailure)
++import Text.Read (readMaybe)
++import Data.Char (ord)
++import Numeric (showHex)
+ 
+ 
+ 
+@@ -23,7 +27,16 @@ mapPool mx f xs = do
+ 
+ main :: IO ()
+ main = do
+-    [dir] <- getArgs
++    args <- getArgs
++    case args of
++        ["--check-file", file, limit] -> case readMaybe limit of
++            Just ms | ms > 0 && ms <= 3600000 -> checkOne file ms
++            _ -> putStrLn "Expected timeout in milliseconds (1..3600000)" >> exitFailure
++        [dir] -> legacyMain dir
++        _ -> putStrLn "Usage: GeometryExtending DIR | --check-file FILE TIMEOUT_MS" >> exitFailure
++
++legacyMain :: FilePath -> IO ()
++legacyMain dir = do
+     filesWithBad <- listDirectory dir
+     forM_ (filter (\s -> "BAD_" `isPrefixOf` s) filesWithBad) $ \file ->
+         renameFile (dir <> file) (dir <> drop 4 file)
+@@ -53,3 +66,29 @@ main = do
+     
+     
+     
++
++-- Machine-readable single-file mode never renames its input. Force the Boolean
++-- inside the timeout; runRand alone can return a thunk whose work happens later.
++checkOne :: FilePath -> Int -> IO ()
++checkOne file milliseconds = do
++    outcome <- try (timeout (milliseconds * 1000) $ do
++        contents <- readFile file
++        _ <- evaluate (length contents)
++        case parseTheorem file $ unlines . fmap tail . filter ("!" `isPrefixOf`) . lines $ contents of
++            Left err -> ioError (userError (show err))
++            Right (cs, cc) -> runRand (check10 cs cc) >>= evaluate
++        ) :: IO (Either SomeException (Maybe Bool))
++    let (status, message) = case outcome of
++            Left err -> ("error", displayException err)
++            Right Nothing -> ("timeout", "Check exceeded time limit")
++            Right (Just True) -> ("accepted", "")
++            Right (Just False) -> ("rejected", "Construction failed the extending filter")
++    putStrLn $ "{\"status\":" <> jsonString status <> ",\"message\":" <> jsonString message <> "}"
++
++jsonString :: String -> String
++jsonString text = "\"" <> concatMap escape text <> "\""
++    where
++        escape '\"' = "\\\""
++        escape '\\' = "\\\\"
++        escape c | ord c < 32 = let hex = showHex (ord c) "" in "\\u" <> replicate (4 - length hex) '0' <> hex
++                 | otherwise = [c]
