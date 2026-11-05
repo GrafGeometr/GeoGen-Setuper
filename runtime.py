@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -159,6 +160,11 @@ EqualLineSegments: A, D, D, B - total ranking 1
     run_pipeline(ROOT / 'examples/input_projections.txt', output / 'job', extending=False, timeout=120)
     if not list((output / 'job/geo').glob('*.geo')):
         raise RuntimeError('Пример GeoGen не дал ни одной задачи для конвертации.')
+    # Exactly one new midpoint is reachable through visible D/E, despite hidden A/B/C.
+    hidden_job = run_pipeline(ROOT / 'examples/input_hidden_points.txt', output / 'hidden-job', extending=False, timeout=120)
+    hidden_log = (hidden_job / 'geogen.log').read_text()
+    if not re.search(r"Generated configurations: 1(?:\r?\n|$)", hidden_log):
+        raise RuntimeError('HiddenPoints did not restrict the full GeoGen pipeline to one configuration.')
     if not VIEWER.is_file():
         raise RuntimeError('Не найден launcher Geometry.')
     print('SMOKE OK: GeoGen → JVM-конвертер → .geo; Extending на контрольных примерах; Geometry упакован.')

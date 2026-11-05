@@ -240,6 +240,10 @@ class Builder:
     def build(self):
         self.toolchain()
         self.prepare_sources()
+        patch = HERE / 'patches/hidden-points.patch'
+        # Apply inside the disposable source copy; original checkouts remain untouched.
+        self.run(['git', 'apply', '--check', patch], cwd=self.work / 'GeoGen', name='hidden-points-check')
+        self.run(['git', 'apply', patch], cwd=self.work / 'GeoGen', name='hidden-points-patch')
         if self.stage.exists():
             shutil.rmtree(self.stage)
         self.stage.mkdir()
@@ -333,7 +337,8 @@ class Builder:
             'platform': platform.platform(), 'sources': self.manifest,
             'dotnet_sdk': DOTNET_VERSION, 'ghc': GHC_VERSION,
             'gradle': GRADLE_VERSION, 'jdk': '17',
-            'patches': ['XDG data path and second CLI argument in desktop Main.kt',
+            'patches': ['HiddenPoints input, generation restriction and symmetry-safe deduplication',
+                        'XDG data path and second CLI argument in desktop Main.kt',
                         'desktop common source directory', 'JVM target for original converter',
                         'threaded RTS for Extending']}, indent=2))
         shutil.copy2(HERE / 'README.md', self.stage / 'BUILDER-README.md')

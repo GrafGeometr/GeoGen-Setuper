@@ -1,0 +1,514 @@
+diff --git a/Setup.md b/Setup.md
+index e27f9db..4eed9db 100644
+--- a/Setup.md
++++ b/Setup.md
+@@ -21,6 +21,35 @@ This is the main module that runs the main algorithm. The application tries to r
+   4. [**JsonOutput**](Source/Launchers/GeoGen.MainLauncher/Examples/Output/JsonOutput) -  All found theorems that haven't been excluded in the JSON format.
+   5. [**JsonBestTheorems**](Source/Launchers/GeoGen.MainLauncher/Examples/Output/JsonBestTheorems) - Same as *ReadableBestTheorems*, but in the JSON format.
+ 
++## Hidden initial points
++
++An optional `HiddenPoints:` line belongs after the initial configuration and before
++`Iterations:`. List the names of loose or constructed initial **points**, separated
++by commas. Omit the line (or leave its value empty) for the original behavior.
++
++```
++Initial configuration:
++ Triangle: A, B, C
++ D = Midpoint(A, B)
++ E = Midpoint(A, C)
++
++HiddenPoints: A, B, C
++Iterations: 1
++```
++
++Here new constructions can use D and E (for example, Midpoint(D, E)), but cannot
++use A, B or C directly. Hiding a point does not hide its descendants: existing
++objects defined from it remain usable. Hidden points are still constructed,
++retained in exported configurations, and used for theorem finding/proving and
++visualization. This is a search restriction, not a drawing style. Object limits
++still count only objects added beyond the entire initial configuration.
++
++Configuration deduplication preserves the hidden subset. Mathematical symmetry
++requirements selected by `SymmetryGenerationMode` retain their existing meaning.
++Unknown names, non-points and duplicate declarations are rejected. See
++`Source/Launchers/GeoGen.MainLauncher/Examples/Inputs/input_hidden_points.txt`
++for a complete runnable input.
++
+ ## Constructions
+ 
+ The following constructions are supported in input files (and object introduction rules / inference rules / drawing rules...):
+diff --git a/Source/Library/GeoGen.ConfigurationGenerator/ConfigurationFilter/Base/ConfigurationFilterBase.cs b/Source/Library/GeoGen.ConfigurationGenerator/ConfigurationFilter/Base/ConfigurationFilterBase.cs
+index 5c63fa4..9d17b37 100644
+--- a/Source/Library/GeoGen.ConfigurationGenerator/ConfigurationFilter/Base/ConfigurationFilterBase.cs
++++ b/Source/Library/GeoGen.ConfigurationGenerator/ConfigurationFilter/Base/ConfigurationFilterBase.cs
+@@ -17,6 +17,17 @@ namespace GeoGen.ConfigurationGenerator
+ 
+         #endregion
+ 
++        /// <summary>
++        /// Relabellings must preserve the hidden subset and the initial seed when generation is restricted.
++        /// Otherwise canonicalization may select a representative that cannot be generated.
++        /// </summary>
++        protected IEnumerable<IReadOnlyDictionary<LooseConfigurationObject, LooseConfigurationObject>> GetIsomorphicMappings()
++            => GeneratorInput.InitialConfiguration.LooseObjectsHolder.GetIsomorphicMappings()
++                .Where(mapping => GeneratorInput.HiddenPoints.Count == 0 ||
++                    (GeneratorInput.HiddenPoints.All(point => GeneratorInput.HiddenPoints.Contains(point.Remap(mapping))) &&
++                     GeneratorInput.InitialConfiguration.ConstructedObjects.All(obj =>
++                         GeneratorInput.InitialConfiguration.ConstructedObjectsSet.Contains(obj.Remap(mapping)))));
++
+         #region IConfigurationFilter properties
+ 
+         /// <inheritdoc/>
+diff --git a/Source/Library/GeoGen.ConfigurationGenerator/ConfigurationFilter/FastConfigurationFilter.cs b/Source/Library/GeoGen.ConfigurationGenerator/ConfigurationFilter/FastConfigurationFilter.cs
+index 64d9791..30ad341 100644
+--- a/Source/Library/GeoGen.ConfigurationGenerator/ConfigurationFilter/FastConfigurationFilter.cs
++++ b/Source/Library/GeoGen.ConfigurationGenerator/ConfigurationFilter/FastConfigurationFilter.cs
+@@ -59,7 +59,7 @@ namespace GeoGen.ConfigurationGenerator
+ 
+             // We need to find out if the current configuration if the representant
+             // of its isomorphic class. Therefore we take all the isomorphic mappings                            
+-            var minIdsSet = configuration.LooseObjectsHolder.GetIsomorphicMappings()
++            var minIdsSet = GetIsomorphicMappings()
+                     // For every make ids set from the constructed objects 
+                     .Select(mapping => MakeIdsSet(configuration.ConstructedObjects
+                         // that are remapped using this mapping
+diff --git a/Source/Library/GeoGen.ConfigurationGenerator/ConfigurationFilter/MemoryEfficientConfigurationFilter.cs b/Source/Library/GeoGen.ConfigurationGenerator/ConfigurationFilter/MemoryEfficientConfigurationFilter.cs
+index a06d42a..8a00d0b 100644
+--- a/Source/Library/GeoGen.ConfigurationGenerator/ConfigurationFilter/MemoryEfficientConfigurationFilter.cs
++++ b/Source/Library/GeoGen.ConfigurationGenerator/ConfigurationFilter/MemoryEfficientConfigurationFilter.cs
+@@ -69,7 +69,7 @@ namespace GeoGen.ConfigurationGenerator
+             var objectStringsCache = new Dictionary<ConstructedConfigurationObject, string>();
+ 
+             // Take all isomorphic mappings
+-            var normalOrderOfAddedObjects = configuration.LooseObjectsHolder.GetIsomorphicMappings()
++            var normalOrderOfAddedObjects = GetIsomorphicMappings()
+                 // For a given mapping take the constructed objects
+                 .Select(mapping => configuration.ConstructedObjects
+                     // Reconstruct them
+diff --git a/Source/Library/GeoGen.ConfigurationGenerator/ConfigurationGenerator.cs b/Source/Library/GeoGen.ConfigurationGenerator/ConfigurationGenerator.cs
+index 1579cee..1ad495d 100644
+--- a/Source/Library/GeoGen.ConfigurationGenerator/ConfigurationGenerator.cs
++++ b/Source/Library/GeoGen.ConfigurationGenerator/ConfigurationGenerator.cs
+@@ -100,11 +100,16 @@ namespace GeoGen.ConfigurationGenerator
+         /// <returns>The enumerator of generated configurations.</returns>
+         private static IEnumerator<GeneratedConfiguration> ExtendConfiguration(GeneratedConfiguration currentConfiguration, ConfigurationGeneratorInput input, IConfigurationFilter filter)
+         {
++            // Retain all initial definitions and geometry, but exclude hidden points from new arguments.
++            var availableObjects = input.HiddenPoints.Count == 0
++                ? currentConfiguration.ObjectMap
++                : new ConfigurationObjectMap(currentConfiguration.AllObjects.Where(obj => !input.HiddenPoints.Contains(obj)));
++
+             // For a given configuration we create all possible objects using the constructions from the input
+             return input.Constructions.SelectMany(construction =>
+             {
+                 // First we check if we have enough object to match the signature
+-                if (!construction.Signature.CanBeMatched(currentConfiguration.ObjectMap))
++                if (!construction.Signature.CanBeMatched(availableObjects))
+                     return Enumerable.Empty<ConstructedConfigurationObject>();
+ 
+                 // Now we check whether adding an object of the current type wouldn't exceed the maximal number
+@@ -119,7 +124,7 @@ namespace GeoGen.ConfigurationGenerator
+ 
+                 // Now we're sure we can generate some objects
+                 // First we take all the available pairs [object type, objects]
+-                return currentConfiguration.ObjectMap
++                return availableObjects
+                         // Those are wrapped in a dictionary mapping object types to particular objects
+                         // We take only those types that are required in our signature
+                         .Where(keyValue => construction.Signature.ObjectTypesToNeededCount.ContainsKey(keyValue.Key))
+diff --git a/Source/Library/GeoGen.ConfigurationGenerator/ConfigurationGeneratorInput.cs b/Source/Library/GeoGen.ConfigurationGenerator/ConfigurationGeneratorInput.cs
+index bb1752e..36bb62b 100644
+--- a/Source/Library/GeoGen.ConfigurationGenerator/ConfigurationGeneratorInput.cs
++++ b/Source/Library/GeoGen.ConfigurationGenerator/ConfigurationGeneratorInput.cs
+@@ -36,6 +36,12 @@ namespace GeoGen.ConfigurationGenerator
+         /// </summary>
+         public Func<GeneratedConfiguration, bool> ConfigurationFilter { get; }
+ 
++        /// <summary>
++        /// Initial points excluded from arguments of newly generated constructions.
++        /// They remain available to initial definitions and theorem finding.
++        /// </summary>
++        public IReadOnlyHashSet<ConfigurationObject> HiddenPoints { get; }
++
+         #endregion
+ 
+         #region Constructor
+@@ -48,13 +54,18 @@ namespace GeoGen.ConfigurationGenerator
+         /// <param name="numberOfIterations">The number of iterations that are to be performed by the generator.</param>
+         /// <param name="maximalNumbersOfObjectsToAdd">The dictionary representing at most how many objects of each type should be added to the initial configuration.</param>
+         /// <param name="configurationFilter">The function for filtrating generated configurations.</param>
++        /// <param name="hiddenPoints">Initial points that must not be arguments of new constructions.</param>
+         public ConfigurationGeneratorInput(Configuration initialConfiguration,
+                                            IReadOnlyHashSet<Construction> constructions,
+                                            int numberOfIterations,
+                                            IReadOnlyDictionary<ConfigurationObjectType, int> maximalNumbersOfObjectsToAdd,
+-                                           Func<GeneratedConfiguration, bool> configurationFilter)
++                                           Func<GeneratedConfiguration, bool> configurationFilter,
++                                           IEnumerable<ConfigurationObject> hiddenPoints = null)
+         {
+             InitialConfiguration = initialConfiguration ?? throw new ArgumentNullException(nameof(initialConfiguration));
++            HiddenPoints = (hiddenPoints ?? Enumerable.Empty<ConfigurationObject>()).ToReadOnlyHashSet();
++            if (HiddenPoints.Any(point => point == null || point.ObjectType != ConfigurationObjectType.Point || !InitialConfiguration.AllObjects.Contains(point)))
++                throw new ArgumentException("Hidden points must be points of the initial configuration.", nameof(hiddenPoints));
+             Constructions = constructions ?? throw new ArgumentNullException(nameof(constructions));
+             NumberOfIterations = numberOfIterations;
+             MaximalNumbersOfObjectsToAdd = maximalNumbersOfObjectsToAdd ?? throw new ArgumentNullException(nameof(maximalNumbersOfObjectsToAdd));
+diff --git a/Source/Library/GeoGen.ProblemGenerator.InputProvider/LoadedProblemGeneratorInput.cs b/Source/Library/GeoGen.ProblemGenerator.InputProvider/LoadedProblemGeneratorInput.cs
+index dfe8753..d88a453 100644
+--- a/Source/Library/GeoGen.ProblemGenerator.InputProvider/LoadedProblemGeneratorInput.cs
++++ b/Source/Library/GeoGen.ProblemGenerator.InputProvider/LoadedProblemGeneratorInput.cs
+@@ -36,8 +36,9 @@ namespace GeoGen.ProblemGenerator.InputProvider
+                                            IReadOnlyDictionary<ConfigurationObjectType, int> maximalNumbersOfObjectsToAdd,
+                                            SymmetryGenerationMode symmetryGenerationMode,
+                                            string filePath,
+-                                           string id)
+-            : base(initialConfiguration, constructions, numberOfIterations, maximalNumbersOfObjectsToAdd, symmetryGenerationMode)
++                                           string id,
++                                           IEnumerable<ConfigurationObject> hiddenPoints = null)
++            : base(initialConfiguration, constructions, numberOfIterations, maximalNumbersOfObjectsToAdd, symmetryGenerationMode, hiddenPoints)
+         {
+             FilePath = filePath ?? throw new ArgumentNullException(nameof(filePath));
+             Id = id ?? throw new ArgumentNullException(nameof(id));
+diff --git a/Source/Library/GeoGen.ProblemGenerator.InputProvider/ProblemGeneratorInputProvider.cs b/Source/Library/GeoGen.ProblemGenerator.InputProvider/ProblemGeneratorInputProvider.cs
+index f8fbc01..573656d 100644
+--- a/Source/Library/GeoGen.ProblemGenerator.InputProvider/ProblemGeneratorInputProvider.cs
++++ b/Source/Library/GeoGen.ProblemGenerator.InputProvider/ProblemGeneratorInputProvider.cs
+@@ -125,7 +125,8 @@ namespace GeoGen.ProblemGenerator.InputProvider
+                         initialConfiguration: generatorInput.InitialConfiguration,
+                         numberOfIterations: generatorInput.NumberOfIterations,
+                         maximalNumbersOfObjectsToAdd: generatorInput.MaximalNumbersOfObjectsToAdd,
+-                        symmetryGenerationMode: generatorInput.SymmetryGenerationMode
++                        symmetryGenerationMode: generatorInput.SymmetryGenerationMode,
++                        hiddenPoints: generatorInput.HiddenPoints
+                     ));
+                 }
+                 catch (ParsingException e)
+@@ -178,21 +179,40 @@ namespace GeoGen.ProblemGenerator.InputProvider
+             #region Parsing configuration
+ 
+             // Get the configuration lines from the remaining lines
+-            var configurationLines = lines.ItemsBetween(configurationLineIndex + 1, lines.Count)
++            var configurationSectionLines = lines.ItemsBetween(configurationLineIndex + 1, lines.Count)
+                 // Unless we run into a line specifying iterations
+                 .TakeWhile(line => !line.StartsWith("Iterations:"))
+                 // Enumerate
+                 .ToList();
+ 
+-            // Parse the configuration from them
+-            var configuration = Parser.ParseConfiguration(configurationLines).configuration;
++            // HiddenPoints is optional metadata, not a construction definition.
++            var hiddenPointLines = configurationSectionLines.Where(line => line.StartsWith("HiddenPoints:")).ToArray();
++            if (hiddenPointLines.Length > 1)
++                throw new ParsingException("HiddenPoints may only be specified once.");
++            var configurationLines = configurationSectionLines.Where(line => !line.StartsWith("HiddenPoints:")).ToList();
++            var (configuration, namesToObjects) = Parser.ParseConfiguration(configurationLines);
++            var hiddenPoints = new HashSet<ConfigurationObject>();
++            if (hiddenPointLines.Length == 1)
++            {
++                var value = hiddenPointLines[0]["HiddenPoints:".Length..].Trim();
++                if (value.Length != 0)
++                    foreach (var name in value.Split(',').Select(name => name.Trim()))
++                    {
++                        if (!namesToObjects.TryGetValue(name, out var point))
++                            throw new ParsingException($"Unknown hidden point '{name}'. Declare it in the initial configuration.");
++                        if (point.ObjectType != ConfigurationObjectType.Point)
++                            throw new ParsingException($"HiddenPoints accepts points only; '{name}' is {point.ObjectType}.");
++                        if (!hiddenPoints.Add(point))
++                            throw new ParsingException($"Hidden point '{name}' is specified more than once.");
++                    }
++            }
+ 
+             #endregion
+ 
+             #region Parsing iterations
+ 
+             // Find the index of the iteration line, which should be after the configuration declaration
+-            var iterationLineIndex = configurationLineIndex + configurationLines.Count + 1;
++            var iterationLineIndex = configurationLineIndex + configurationSectionLines.Count + 1;
+ 
+             // Make sure we have enough lines
+             if (iterationLineIndex >= lines.Count)
+@@ -304,7 +324,8 @@ namespace GeoGen.ProblemGenerator.InputProvider
+                 constructions: constructions,
+                 numberOfIterations: numberOfIterations,
+                 maximalNumbersOfObjectsToAdd: maximalNumbersOfObjectsToAdd,
+-                symmetryGenerationMode: symmetryGenerationMode
++                symmetryGenerationMode: symmetryGenerationMode,
++                hiddenPoints: hiddenPoints
+             );
+         }
+ 
+diff --git a/Source/Library/GeoGen.ProblemGenerator/ProblemGenerator.cs b/Source/Library/GeoGen.ProblemGenerator/ProblemGenerator.cs
+index 215c597..552e838 100644
+--- a/Source/Library/GeoGen.ProblemGenerator/ProblemGenerator.cs
++++ b/Source/Library/GeoGen.ProblemGenerator/ProblemGenerator.cs
+@@ -180,6 +180,10 @@ namespace GeoGen.ProblemGenerator
+                     // Find out if given objects to be added could really be added
+                     .Any(objectsToBeAdded =>
+                     {
++                        // A symmetric completion requiring a hidden point as a direct argument is unreachable.
++                        if (objectsToBeAdded.Any(obj => obj.PassedArguments.FlattenedList.Any(input.HiddenPoints.Contains)))
++                            return false;
++
+                         // If we don't have enough iterations to add that many objects, then we're done
+                         if (configuration.IterationIndex + objectsToBeAdded.Count > input.NumberOfIterations)
+                             return false;
+@@ -297,7 +301,8 @@ namespace GeoGen.ProblemGenerator
+                 maximalNumbersOfObjectsToAdd: input.MaximalNumbersOfObjectsToAdd,
+ 
+                 // As a filter pass our verification that draws the configuration geometrically
+-                configurationFilter: VerifyConfigurationCorrectness
++                configurationFilter: VerifyConfigurationCorrectness,
++                hiddenPoints: input.HiddenPoints
+             );
+ 
+             // Return the tuple of initial theorems and a lazy algorithm enumerable
+diff --git a/Source/Library/GeoGen.ProblemGenerator/ProblemGeneratorInput.cs b/Source/Library/GeoGen.ProblemGenerator/ProblemGeneratorInput.cs
+index 990f0a1..f75b00a 100644
+--- a/Source/Library/GeoGen.ProblemGenerator/ProblemGeneratorInput.cs
++++ b/Source/Library/GeoGen.ProblemGenerator/ProblemGeneratorInput.cs
+@@ -35,6 +35,12 @@ namespace GeoGen.ProblemGenerator
+         /// </summary>
+         public SymmetryGenerationMode SymmetryGenerationMode { get; }
+ 
++        /// <summary>
++        /// Initial points excluded from arguments of newly generated constructions.
++        /// They remain available to initial definitions and theorem finding.
++        /// </summary>
++        public IReadOnlyHashSet<ConfigurationObject> HiddenPoints { get; }
++
+         #endregion
+ 
+         #region Constructor
+@@ -47,13 +53,18 @@ namespace GeoGen.ProblemGenerator
+         /// <param name="numberOfIterations"><inheritdoc cref="NumberOfIterations" path="/summary"/></param>
+         /// <param name="maximalNumbersOfObjectsToAdd"><inheritdoc cref="MaximalNumbersOfObjectsToAdd" path="/summary"/></param>
+         /// <param name="symmetryGenerationMode"><inheritdoc cref="SymmetryGenerationMode" path="/summary"/></param>
++        /// <param name="hiddenPoints">Initial points that must not be arguments of new constructions.</param>
+         public ProblemGeneratorInput(Configuration initialConfiguration,
+                                      IReadOnlyHashSet<Construction> constructions,
+                                      int numberOfIterations,
+                                      IReadOnlyDictionary<ConfigurationObjectType, int> maximalNumbersOfObjectsToAdd,
+-                                     SymmetryGenerationMode symmetryGenerationMode)
++                                     SymmetryGenerationMode symmetryGenerationMode,
++                                     IEnumerable<ConfigurationObject> hiddenPoints = null)
+         {
+             InitialConfiguration = initialConfiguration ?? throw new ArgumentNullException(nameof(initialConfiguration));
++            HiddenPoints = (hiddenPoints ?? Enumerable.Empty<ConfigurationObject>()).ToReadOnlyHashSet();
++            if (HiddenPoints.Any(point => point == null || point.ObjectType != ConfigurationObjectType.Point || !InitialConfiguration.AllObjects.Contains(point)))
++                throw new ArgumentException("Hidden points must be points of the initial configuration.", nameof(hiddenPoints));
+             Constructions = constructions ?? throw new ArgumentNullException(nameof(constructions));
+             NumberOfIterations = numberOfIterations;
+             MaximalNumbersOfObjectsToAdd = maximalNumbersOfObjectsToAdd ?? throw new ArgumentNullException(nameof(maximalNumbersOfObjectsToAdd));
+diff --git a/Source/Tests/UnitTests/GeoGen.ConfigurationGenerator.Tests/GeoGen.ConfigurationGenerator.Tests.csproj b/Source/Tests/UnitTests/GeoGen.ConfigurationGenerator.Tests/GeoGen.ConfigurationGenerator.Tests.csproj
+index 7960afd..395b657 100644
+--- a/Source/Tests/UnitTests/GeoGen.ConfigurationGenerator.Tests/GeoGen.ConfigurationGenerator.Tests.csproj
++++ b/Source/Tests/UnitTests/GeoGen.ConfigurationGenerator.Tests/GeoGen.ConfigurationGenerator.Tests.csproj
+@@ -17,6 +17,7 @@
+ 
+ 	<ItemGroup>
+ 		<ProjectReference Include="..\..\..\Library\GeoGen.ConfigurationGenerator\GeoGen.ConfigurationGenerator.csproj" />
++        <ProjectReference Include="..\..\..\Library\GeoGen.ProblemGenerator.InputProvider\GeoGen.ProblemGenerator.InputProvider.csproj" />
+ 		<ProjectReference Include="..\..\..\Library\GeoGen.Infrastructure\GeoGen.Infrastructure.csproj" />
+ 		<ProjectReference Include="..\..\..\Library\GeoGen.Utilities\GeoGen.Utilities.csproj" />
+ 	</ItemGroup>
+diff --git a/Source/Tests/UnitTests/GeoGen.ConfigurationGenerator.Tests/HiddenPointsTest.cs b/Source/Tests/UnitTests/GeoGen.ConfigurationGenerator.Tests/HiddenPointsTest.cs
+new file mode 100644
+index 0000000..486e44b
+--- /dev/null
++++ b/Source/Tests/UnitTests/GeoGen.ConfigurationGenerator.Tests/HiddenPointsTest.cs
+@@ -0,0 +1,171 @@
++using FluentAssertions;
++using GeoGen.Core;
++using GeoGen.Infrastructure;
++using GeoGen.ProblemGenerator;
++using GeoGen.ProblemGenerator.InputProvider;
++using GeoGen.Utilities;
++using Ninject;
++using NUnit.Framework;
++using static GeoGen.Core.ConfigurationObjectType;
++using static GeoGen.Core.LooseObjectLayout;
++using static GeoGen.Core.PredefinedConstructions;
++
++namespace GeoGen.ConfigurationGenerator.Tests
++{
++    [TestFixture]
++    public class HiddenPointsTest
++    {
++        private static IConfigurationGenerator Generator(ConfigurationFilterType type)
++            => NinjectUtilities.CreateKernel().AddConfigurationGenerator(new GenerationSettings(type)).Get<IConfigurationGenerator>();
++
++        private static ConfigurationGeneratorInput Input(Configuration configuration, IEnumerable<ConfigurationObject> hidden,
++            int iterations = 1, IEnumerable<Construction> constructions = null, int maxPoints = 3)
++            => new ConfigurationGeneratorInput(configuration,
++                (constructions ?? new[] { Midpoint }).ToReadOnlyHashSet(), iterations,
++                new Dictionary<ConfigurationObjectType, int> { { Point, maxPoints }, { Line, 1 }, { Circle, 1 } },
++                _ => true, hidden);
++
++        [TestCase(ConfigurationFilterType.Fast)]
++        [TestCase(ConfigurationFilterType.MemoryEfficient)]
++        [TestCase(ConfigurationFilterType.Simple)]
++        public void Hidden_vertex_does_not_remove_the_only_reachable_midpoint(ConfigurationFilterType type)
++        {
++            var a = new LooseConfigurationObject(Point);
++            var b = new LooseConfigurationObject(Point);
++            var c = new LooseConfigurationObject(Point);
++            var configuration = Configuration.DeriveFromObjects(Triangle, a, b, c);
++            var outputs = Generator(type).Generate(Input(configuration, new[] { a })).ToArray();
++            outputs.Should().ContainSingle();
++            outputs[0].ConstructedObjects.Should().Contain(new ConstructedConfigurationObject(Midpoint, b, c));
++            outputs[0].AllObjects.Should().Contain(a);
++        }
++
++        [TestCase(ConfigurationFilterType.Fast)]
++        [TestCase(ConfigurationFilterType.MemoryEfficient)]
++        [TestCase(ConfigurationFilterType.Simple)]
++        public void All_hidden_vertices_leave_no_arguments_for_any_construction(ConfigurationFilterType type)
++        {
++            var a = new LooseConfigurationObject(Point);
++            var b = new LooseConfigurationObject(Point);
++            var c = new LooseConfigurationObject(Point);
++            var configuration = Configuration.DeriveFromObjects(Triangle, a, b, c);
++            Generator(type).Generate(Input(configuration, new[] { a, b, c },
++                constructions: new[] { Midpoint, LineFromPoints, Circumcircle })).Should().BeEmpty();
++        }
++
++        [TestCase(ConfigurationFilterType.Fast, false)]
++        [TestCase(ConfigurationFilterType.MemoryEfficient, false)]
++        [TestCase(ConfigurationFilterType.Fast, true)]
++        [TestCase(ConfigurationFilterType.MemoryEfficient, true)]
++        public void Restricted_symmetry_filters_preserve_all_reachable_classes(ConfigurationFilterType type, bool hideConstructed)
++        {
++            var a = new LooseConfigurationObject(Point);
++            var b = new LooseConfigurationObject(Point);
++            var c = new LooseConfigurationObject(Point);
++            var d = new ConstructedConfigurationObject(Midpoint, a, b);
++            var configuration = Configuration.DeriveFromObjects(Triangle, a, b, c, d);
++            var hidden = hideConstructed ? new ConfigurationObject[] { d } : new ConfigurationObject[] { a };
++            var input = Input(configuration, hidden, iterations: 3);
++            var expected = Generator(ConfigurationFilterType.Simple).Generate(input).ToArray();
++            var actual = Generator(type).Generate(input).ToArray();
++            var mappings = configuration.LooseObjectsHolder.GetIsomorphicMappings()
++                .Where(m => hidden.All(h => hidden.Contains(h.Remap(m))))
++                .Where(m => configuration.ConstructedObjects.All(o => configuration.ConstructedObjectsSet.Contains(o.Remap(m))))
++                .ToArray();
++            bool Equivalent(Configuration left, Configuration right) => mappings.Any(m =>
++                left.ConstructedObjects.Select(o => o.Remap(m)).ToHashSet().SetEquals(right.ConstructedObjects));
++            foreach (var generated in actual)
++                generated.ConstructedObjects.Except(configuration.ConstructedObjects)
++                    .SelectMany(o => o.PassedArguments.FlattenedList).Should().NotContain(hidden);
++            foreach (var generated in expected)
++                actual.Any(candidate => Equivalent(candidate, generated)).Should().BeTrue("every reachable equivalence class must survive");
++            for (var i = 0; i < actual.Length; i++)
++                for (var j = i + 1; j < actual.Length; j++)
++                    Equivalent(actual[i], actual[j]).Should().BeFalse("equivalent configurations must not be emitted twice");
++        }
++
++        [Test]
++        public void Visible_initial_objects_built_from_hidden_points_remain_usable()
++        {
++            var a = new LooseConfigurationObject(Point);
++            var b = new LooseConfigurationObject(Point);
++            var c = new LooseConfigurationObject(Point);
++            var d = new ConstructedConfigurationObject(Midpoint, a, b);
++            var configuration = Configuration.DeriveFromObjects(Triangle, a, b, c, d);
++            var outputs = Generator(ConfigurationFilterType.MemoryEfficient).Generate(Input(configuration, new[] { a })).ToArray();
++            outputs.SelectMany(o => o.ConstructedObjects).Should().Contain(new ConstructedConfigurationObject(Midpoint, c, d));
++            Generator(ConfigurationFilterType.MemoryEfficient).Generate(Input(configuration, new[] { a }, maxPoints: 0)).Should().BeEmpty();
++        }
++
++        [Test]
++        public void Api_rejects_nonpoints_and_objects_outside_initial_configuration()
++        {
++            var a = new LooseConfigurationObject(Point);
++            var b = new LooseConfigurationObject(Point);
++            var c = new LooseConfigurationObject(Point);
++            var line = new ConstructedConfigurationObject(LineFromPoints, a, b);
++            var configuration = Configuration.DeriveFromObjects(Triangle, a, b, c, line);
++            foreach (var hidden in new ConfigurationObject[] { line, new LooseConfigurationObject(Point) })
++            {
++                Action invalid = () => Input(configuration, new[] { hidden });
++                invalid.Should().Throw<ArgumentException>();
++                Action invalidProblem = () => new ProblemGeneratorInput(configuration, new Construction[] { Midpoint }.ToReadOnlyHashSet(),
++                    1, new Dictionary<ConfigurationObjectType, int>(), SymmetryGenerationMode.GenerateBothSymmetricAndAsymmetric, new[] { hidden });
++                invalidProblem.Should().Throw<ArgumentException>();
++            }
++        }
++
++        private string _directory;
++        [SetUp]
++        public void SetUp() => _directory = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "geogen-hidden-" + Guid.NewGuid())).FullName;
++        [TearDown]
++        public void TearDown() => Directory.Delete(_directory, recursive: true);
++
++        private async Task<LoadedProblemGeneratorInput> Parse(string metadata)
++        {
++            var path = Path.Combine(_directory, "input_hidden.txt");
++            await File.WriteAllTextAsync(path, $@"# Hidden metadata does not belong to the geometry parser
++Constructions:
++ Midpoint
++Initial configuration:
++ Triangle: A, B, C
++ D = Midpoint(A, B)
++ l = LineFromPoints(A, B)
++{metadata}
++Iterations: 1
++MaximalPoints: 1
++MaximalLines: 0
++MaximalCircles: 0
++SymmetryGenerationMode: GenerateBothSymmetricAndAsymmetric
++".Replace("\n", "\r\n"));
++            var provider = new ProblemGeneratorInputProvider(new ProblemGeneratorInputProviderSettings(_directory, "input", "txt"));
++            return (await provider.GetProblemGeneratorInputsAsync()).Single();
++        }
++
++        [TestCase("")]
++        [TestCase("HiddenPoints:")]
++        public async Task Old_inputs_and_empty_hidden_list_keep_existing_behavior(string metadata)
++            => (await Parse(metadata)).HiddenPoints.Should().BeEmpty();
++
++        [Test]
++        public async Task Hidden_names_are_resolved_and_propagated_to_loaded_input()
++        {
++            var input = await Parse("HiddenPoints: A, D");
++            input.HiddenPoints.Should().HaveCount(2);
++            input.HiddenPoints.Should().Contain(input.InitialConfiguration.LooseObjectsHolder.LooseObjects[0]);
++            input.HiddenPoints.Should().Contain(input.InitialConfiguration.ConstructedObjects[0]);
++        }
++
++        [TestCase("HiddenPoints: Missing", "Unknown hidden point")]
++        [TestCase("HiddenPoints: l", "points only")]
++        [TestCase("HiddenPoints: A, A", "more than once")]
++        [TestCase("HiddenPoints: A,", "Unknown hidden point")]
++        [TestCase("HiddenPoints: A\nHiddenPoints: B", "only be specified once")]
++        public async Task Invalid_metadata_is_rejected_with_a_useful_error(string metadata, string message)
++        {
++            Func<Task> parse = async () => await Parse(metadata);
++            var failure = await parse.Should().ThrowAsync<ProblemGeneratorInputProviderException>();
++            failure.Which.InnerException.Message.Should().Contain(message);
++        }
++    }
++}
+diff --git a/Source/Launchers/GeoGen.MainLauncher/Examples/Inputs/input_hidden_points.txt b/Source/Launchers/GeoGen.MainLauncher/Examples/Inputs/input_hidden_points.txt
+new file mode 100644
+index 0000000..ede895c
+--- /dev/null
++++ b/Source/Launchers/GeoGen.MainLauncher/Examples/Inputs/input_hidden_points.txt
+@@ -0,0 +1,16 @@
++# A, B, C define the seed but are never arguments of newly generated objects.
++# D and E depend on them and remain available to generation.
++Constructions:
++ Midpoint
++
++Initial configuration:
++ Triangle: A, B, C
++ D = Midpoint(A, B)
++ E = Midpoint(A, C)
++
++HiddenPoints: A, B, C
++Iterations: 1
++MaximalPoints: 1
++MaximalLines: 0
++MaximalCircles: 0
++SymmetryGenerationMode: GenerateBothSymmetricAndAsymmetric
