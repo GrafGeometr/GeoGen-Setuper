@@ -1,0 +1,120 @@
+# GeoGen-Setuper — Linux-сборщик Geometry Suite
+
+Без Git можно скачать **Code → Download ZIP** на странице репозитория,
+распаковать архив и открыть терминал в получившейся папке. В этом случае
+начинайте с команды `bash build.sh deps`.
+
+Консольная программа на Python (только стандартная библиотека) и короткий Bash entrypoint.
+Собирает GeoGen, GeometryExtending, Geometry Desktop и исходный GeoGenIntegration
+в один каталог с собственными .NET runtime и Java runtime. Конвертер собирается
+из того же Kotlin-кода под JVM, поэтому Windows/Kotlin Native не требуется.
+
+## Быстрый старт
+
+Поддерживаемая цель: Linux x86_64, Debian 12/13 либо Ubuntu 22.04/24.04,
+Python >= 3.10, JDK 17. Для сборки нужны Интернет и несколько ГБ свободного места.
+Первый запуск скачивает SDK и библиотеки и может занять десятки минут.
+
+```bash
+git clone https://github.com/GrafGeometr/GeoGen-Setuper.git
+cd GeoGen-Setuper
+bash build.sh deps       # Debian/Ubuntu: системные пакеты через apt/sudo
+bash build.sh doctor
+bash build.sh build
+```
+
+`deps` — единственная команда, использующая apt/sudo. Она явно устанавливает
+перечисленные в builder.py системные зависимости. `build` не использует sudo:
+локально устанавливает недостающие .NET SDK 7.0.410, GHC 9.6.6, Cabal и Gradle 7.2.
+JDK 17 и C toolchain должны быть установлены до сборки (командой deps или вручную).
+По умолчанию исходники клонируются из трёх репозиториев GrafGeometr на коммиты,
+записанные в sources.json. Скрипты установки .NET/GHCup скачиваются с официальных
+сайтов; Gradle проверяется по опубликованному SHA-256.
+
+Готовый комплект: `dist/geometry-suite/`. Кэш, инструменты и логи: `.builder/`.
+Сборка обязательным образом выполняет проверку GeoGen → конвертер → .geo,
+а также два контрольных примера Extending. Ошибка останавливает сборку.
+Существующий каталог результата не перезаписывается: задайте другой --output.
+Не удаляйте .builder, если хотите повторно использовать скачанные зависимости.
+
+## Существующие исходники и инструменты
+
+Если рядом лежат GeoGen/, Geometry/, GeometryExtending/:
+
+```bash
+bash build.sh build --sources /path/to/projects --output /path/to/new-suite
+```
+
+Репозитории копируются в рабочий каталог; оригинальные исходники не меняются.
+Локальные изменения включаются в копию, их наличие отмечается в BUILD.json.
+
+```bash
+bash build.sh build --sources /path/to/projects \
+  --dotnet /path/to/dotnet --gradle /path/to/gradle-7.2/bin/gradle \
+  --state /path/to/build-cache --output /path/to/new-suite --jobs 2 --test
+```
+
+Поддерживаются JAVA_HOME, PATH (ghc/cabal), CABAL_DIR, NUGET_PACKAGES,
+GRADLE_USER_HOME, HTTP_PROXY/HTTPS_PROXY/NO_PROXY. Для дополнительной настройки
+Gradle предусмотрен GEOMETRY_GRADLE_ARGS, например `--offline` или свойства JVM.
+Значения секретов в аргументы передавать не следует: команды сохраняются в логах.
+`--offline` предназначен для существующих исходников, уже установленных инструментов
+и заполненных кэшей. Подключения к Git в режиме --sources не требуются.
+`--test` дополнительно запускает существующие тесты GeoGen.
+
+## Запуск готового комплекта
+
+```bash
+./dist/geometry-suite/geometry-suite doctor
+./dist/geometry-suite/geometry-suite run ./my-input.txt --output ./run-001
+./dist/geometry-suite/geometry-suite view ./run-001/geo/CollinearPoints.txt1.geo
+```
+
+`run` получает сюжет в существующем текстовом формате GeoGen (см. examples/).
+Последовательно запускает GeoGen, конвертирует ReadableBestTheorems и запускает
+Extending. Каталог запуска должен быть новым; все настройки/логи/результаты
+хранятся внутри него. Внешний таймаут стадии задаётся `--timeout 3600`.
+Исходная логика фильтрации/ранжирования и математические алгоритмы сохранены.
+Потокового поиска и нового интерфейса управления задачами в этой версии нет.
+
+```bash
+geometry-suite convert ./ReadableBestTheorems/CollinearPoints.txt ./new-geo
+geometry-suite check ./new-geo
+geometry-suite view ./example.geo --software
+geometry-suite smoke --output ./new-smoke-dir
+```
+
+`convert` принимает только формат ReadableBestTheorems, не ReadableWithoutProofs.
+`check` сохраняет исходное поведение Extending: BAD_ снимается перед повторной
+проверкой и добавляется при отбраковке. Поэтому проверяйте копии важных файлов.
+Лог пишется в extending.log, сводка — в extending-report.json. Исходный Extending
+не возвращает надёжного статуса каждой задачи: parse error/таймаут не равнозначны
+успешной проверке, а not_rejected в сводке означает только отсутствие BAD_.
+
+## Что исправляется в рабочих копиях
+
+- Geometry Desktop: подключаются общие исходники из Android-каталога;
+  данные размещаются по XDG_DATA_HOME/~/.local/share, исправляется второй CLI-аргумент.
+- GeoGenIntegration: тот же Main.kt собирается под JVM вместо mingwX64.
+- GeometryExtending: добавляются -threaded -rtsopts; число ядер автоматически не навязывается.
+- GeoGen: global.json фиксирует SDK 7.0.410; правила и примеры входят в комплект.
+- Настройки GeoGen формируются заново для каждого запуска с актуальными путями.
+
+## Ограничения
+
+Комплект можно перемещать, включая каталоги с пробелами. Для запуска нужны Python
+3.10+, системные библиотеки glibc/GMP/FFI/NUMA/ICU/OpenSSL и графические библиотеки.
+Java и .NET устанавливать отдельно не нужно. На старой glibc бинарник, собранный
+на новом дистрибутиве, может не запуститься: для распространения собирайте на
+самой старой поддерживаемой ОС. Это не универсальный статический AppImage.
+GUI требует рабочего стола; --software помогает в виртуальных машинах.
+.NET 7 оставлен для совместимости исходного проекта; переход на поддерживаемую
+версию .NET — отдельная последующая работа.
+
+Закреплены исходные коммиты и основные инструменты. Транзитивные зависимости
+Gradle/NuGet ещё не снабжены полным lockfile; Cabal freeze и фактические версии
+исходников сохраняются в комплекте. Побитовая воспроизводимость не заявляется.
+Наборы конструкций/теорем в трёх программах не полностью совпадают: неподдерживаемый
+конвертером объект останавливает конвертацию с ошибкой, а не молча пропускается.
+
+Проверка самого сборщика: `python3 -m unittest discover -s tests -v`.

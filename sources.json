@@ -1,0 +1,5 @@
+{
+  "GeoGen": {"url": "https://github.com/GrafGeometr/GeoGen.git", "commit": "6fd328d192b249e647b1a074c34abd02aa27fc06"},
+  "Geometry": {"url": "https://github.com/GrafGeometr/Geometry.git", "commit": "ae08682f4d0e48e33a970e34a7d7205162c157a6"},
+  "GeometryExtending": {"url": "https://github.com/GrafGeometr/GeometryExtending.git", "commit": "7e2841441705201e02f5b64b8c218f101044c7c8"}
+}
