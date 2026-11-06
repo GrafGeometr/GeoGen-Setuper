@@ -6,6 +6,7 @@ from contextlib import contextmanager
 import fcntl
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -30,13 +31,17 @@ def safe_text(value):
     return str(value).replace('\t', ' ').replace('\r', ' ').replace('\n', ' ')
 
 
+class BusyJobError(RuntimeError):
+    pass
+
+
 @contextmanager
 def job_lock(job):
     with (job / 'stream.lock').open('a') as handle:
         try:
             fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
-            raise RuntimeError('Этот поток уже обрабатывается другим процессом.')
+            raise BusyJobError('Этот поток уже обрабатывается другим процессом.')
         yield
 
 
@@ -103,12 +108,17 @@ class Queue:
         counts = {r[0]: r[1] for r in self.db.execute('SELECT state,count(*) FROM tasks GROUP BY state')}
         metadata = dict(metadata, counts=counts, updatedAt=time.time())
         atomic_text(self.job / 'run-state.json', json.dumps(metadata, ensure_ascii=False, indent=2))
-        rows = self.db.execute('SELECT * FROM tasks ORDER BY COALESCE(finished,discovered) DESC, rowid DESC')
+        rows = self.db.execute('SELECT * FROM tasks ORDER BY rowid ASC')
         lines = []
         for row in rows:
             event = json.loads(row['event'])
+            # Preserve the first five fields for older viewers; metadata is appended.
+            score = event.get('ranking')
+            if isinstance(score, bool) or not isinstance(score, (int, float)) or not math.isfinite(score):
+                score = ''
+            topic = str(event.get('theorem', '')).partition(':')[0].strip() or 'Unknown'
             lines.append('\t'.join(safe_text(x) for x in
-                         (row['id'], row['state'], event.get('theorem', ''), row['geo'], row['message'])))
+                         (row['id'], row['state'], event.get('theorem', ''), row['geo'], row['message'], score, topic)))
         atomic_text(self.job / 'results.tsv', '\n'.join(lines) + ('\n' if lines else ''))
         display_phase = metadata['phase']
         if display_phase == 'finished' and metadata.get('searchState') == 'stopped':
@@ -119,6 +129,25 @@ class Queue:
 
     def close(self):
         self.db.close()
+
+
+def refresh_results(job):
+    """Upgrade presentation metadata for existing jobs without rerunning any work."""
+    job = Path(job).resolve()
+    if not (job / 'run-state.json').is_file() or not (job / 'tasks.sqlite').is_file():
+        return False
+    try:
+        with job_lock(job):
+            metadata = json.loads((job / 'run-state.json').read_text(encoding='utf-8'))
+            queue = Queue(job)
+            try:
+                queue.export(metadata)
+            finally:
+                queue.close()
+    except BusyJobError:
+        # The active consumer owns its manifest; never compete with it for writes.
+        return False
+    return True
 
 
 def process_event(job, identifier, event, extending=True, check_ms=1000):

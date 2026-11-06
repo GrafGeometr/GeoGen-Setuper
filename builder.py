@@ -324,6 +324,7 @@ class Builder:
         desktop = geometry / 'GeometryDesktop'
         write(desktop / 'src/main/kotlin/Main.kt', (HERE / 'templates/desktop-main.kt').read_text())
         write(desktop / 'src/main/kotlin/StreamView.kt', (HERE / 'templates/stream-view.kt').read_text())
+        write(desktop / 'src/main/kotlin/StreamModel.kt', (HERE / 'templates/stream-model.kt').read_text())
         with (desktop / 'build.gradle.kts').open('a') as file:
             file.write('\nsourceSets { main { java.srcDir("../GeometryAndroid/app/src/main/java/com/ibis/geometry/common") } }\n')
         write(desktop / 'src/main/kotlin/TextDrawer.kt', (HERE / 'templates/text-drawer.kt').read_text())

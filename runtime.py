@@ -234,6 +234,8 @@ def main():
             raise RuntimeError('Для Geometry нужна графическая сессия.')
         if args.software:
             os.environ['SKIKO_RENDER_API'] = 'SOFTWARE'
+        from streaming import refresh_results
+        refresh_results(args.directory)
         execute([VIEWER, '--watch', args.directory.resolve()])
     elif args.command == 'convert':
         convert(args.input, args.output)

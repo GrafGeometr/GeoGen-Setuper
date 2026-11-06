@@ -125,10 +125,74 @@ class StreamingTests(unittest.TestCase):
             queue.export({'phase': 'finished'})
             rows = (self.job / 'results.tsv').read_text().splitlines()
             self.assertEqual(len(rows), 1)
-            self.assertEqual(len(rows[0].split('\t')), 5)
+            self.assertEqual(len(rows[0].split('\t')), 7)
             self.assertIn('error', rows[0])
         finally:
             queue.close()
+
+    def test_export_keeps_original_beauty_and_topic_and_does_not_reorder_on_completion(self):
+        self.publish(self.event('story_0001', ranking=4051.612345))
+        self.publish(self.event('story_0002', ranking=0, theorem='CollinearPoints: A, D, B'))
+        queue = streaming.Queue(self.job)
+        try:
+            queue.ingest()
+            queue.finish('story_0002', {'state': 'ready', 'geo': 'b.geo'}, True)
+            queue.export({'phase': 'searching'})
+            before = [line.split('\t') for line in (self.job / 'results.tsv').read_text().splitlines()]
+            queue.finish('story_0001', {'state': 'ready', 'geo': 'a.geo'}, True)
+            queue.export({'phase': 'finished'})
+            after = [line.split('\t') for line in (self.job / 'results.tsv').read_text().splitlines()]
+            self.assertEqual([row[0] for row in before], ['story_0001', 'story_0002'])
+            self.assertEqual([row[0] for row in before], [row[0] for row in after])
+            self.assertEqual(float(after[0][5]), 4051.612345)
+            self.assertEqual(after[0][6], 'EqualLineSegments')
+            self.assertEqual(after[1][5:], ['0', 'CollinearPoints'])
+            # Reopening an old job recovers scores from saved events, without a new search.
+            queue.close()
+            queue = streaming.Queue(self.job)
+            queue.export({'phase': 'finished'})
+            self.assertEqual((self.job / 'results.tsv').read_text().splitlines()[0].split('\t')[5], '4051.612345')
+        finally:
+            queue.close()
+
+    def test_unknown_and_nonfinite_beauty_is_not_presented_as_a_number(self):
+        queue = streaming.Queue(self.job)
+        try:
+            for i, value in enumerate([None, True, float('nan'), float('inf'), 'bad']):
+                self.publish(self.event(f'story_{i}', ranking=value, theorem=f'Unknown: {i}'))
+            queue.ingest()
+            queue.export({'phase': 'finished'})
+            for line in (self.job / 'results.tsv').read_text().splitlines():
+                self.assertEqual(line.split('\t')[5:], ['', 'Unknown'])
+        finally:
+            queue.close()
+
+    def test_refresh_upgrades_finished_manifest_without_rechecking_or_changing_results(self):
+        self.publish(self.event(ranking=1234.56789))
+        queue = streaming.Queue(self.job)
+        queue.ingest()
+        queue.finish('story_0001', {'state': 'ready', 'geo': 'a.geo'}, True)
+        queue.export({'phase': 'finished', 'searchState': 'completed'})
+        finished = queue.db.execute('SELECT finished FROM tasks').fetchone()[0]
+        queue.close()
+        (self.job / 'results.tsv').write_text('story_0001\tready\tEqualLineSegments: A, D, D, B\ta.geo\t\n')
+        with patch.object(streaming, 'process_event') as worker:
+            self.assertTrue(streaming.refresh_results(self.job))
+            worker.assert_not_called()
+        cols = (self.job / 'results.tsv').read_text().splitlines()[0].split('\t')
+        self.assertEqual(cols[5:], ['1234.56789', 'EqualLineSegments'])
+        with sqlite3.connect(self.job / 'tasks.sqlite') as db:
+            self.assertEqual(db.execute('SELECT finished FROM tasks').fetchone()[0], finished)
+        self.assertEqual(json.loads((self.job / 'run-state.json').read_text())['phase'], 'finished')
+
+    def test_refresh_does_not_touch_manifest_of_an_active_consumer(self):
+        queue = streaming.Queue(self.job)
+        queue.export({'phase': 'searching'})
+        queue.close()
+        old = (self.job / 'results.tsv').read_bytes()
+        with streaming.job_lock(self.job):
+            self.assertFalse(streaming.refresh_results(self.job))
+        self.assertEqual((self.job / 'results.tsv').read_bytes(), old)
 
     def test_single_consumer_lock_prevents_parallel_processing(self):
         with streaming.job_lock(self.job):
