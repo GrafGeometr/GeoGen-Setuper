@@ -1,4 +1,5 @@
 """Contracts for durable ingestion, explicit failure states, and restart safety."""
+from concurrent.futures import ThreadPoolExecutor
 import json
 from pathlib import Path
 import sqlite3
@@ -94,6 +95,49 @@ class StreamingTests(unittest.TestCase):
             result = streaming.process_event(self.job, 'story_0001', self.event())
         self.assertEqual(result['state'], 'error')
         self.assertEqual(list((self.job / 'geo').iterdir()), [])
+
+    def test_readable_filenames_preserve_type_and_score_with_safe_fallbacks(self):
+        self.assertEqual(streaming.finding_filename('story_0001', self.event(ranking=4051.612345)),
+                         'EqualLineSegments_4051.612345__story_0001.geo')
+        self.assertEqual(streaming.finding_filename('story_0001', self.event(ranking=0)),
+                         'EqualLineSegments_0__story_0001.geo')
+        self.assertEqual(streaming.finding_filename('story_0001', self.event(ranking=-1.5)),
+                         'EqualLineSegments_-1.5__story_0001.geo')
+        for value in (None, True, float('nan'), float('inf'), 'bad/path'):
+            self.assertEqual(streaming.finding_filename('story_0001', self.event(ranking=value)),
+                             'EqualLineSegments_unrated__story_0001.geo')
+        name = streaming.finding_filename('story_0001', self.event(theorem='../bad/name: A, B', ranking=1))
+        self.assertEqual(Path(name).name, name)
+
+    def test_parallel_equal_scores_publish_distinct_files_and_manifest_links_survive_resume(self):
+        events = [self.event(f'story_{i:04}', ranking=4051.612345,
+                             theorem=f'CollinearPoints: A, B, P{i}', readable=f'drawing {i}')
+                  for i in range(2)]
+        def execute(command, **kwargs):
+            (Path(command[-1]) / 'converted.geo').write_text(Path(command[-2]).read_text())
+            return types.SimpleNamespace(returncode=0, stdout='', stderr='')
+        with patch.object(streaming.subprocess, 'run', side_effect=execute), ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(lambda event: streaming.process_event(
+                self.job, event['id'], event, extending=False), events))
+        self.assertEqual({result['state'] for result in results}, {'unchecked'})
+        self.assertEqual(len({result['geo'] for result in results}), 2)
+        queue = streaming.Queue(self.job)
+        for event, result in zip(events, results):
+            self.assertTrue(result['geo'].startswith('CollinearPoints_4051.612345__'))
+            self.assertEqual((self.job / 'geo' / result['geo']).read_text(), event['readable'])
+            self.publish(event)
+        queue.ingest()
+        for event, result in zip(events, results):
+            queue.finish(event['id'], result, False)
+        queue.export({'phase': 'finished', 'extending': False, 'checkMs': 1000})
+        queue.close()
+        before = {path.name: path.read_bytes() for path in (self.job / 'geo').glob('*.geo')}
+        with patch.object(streaming, 'process_event') as worker:
+            streaming.resume(self.job, workers=2)
+            worker.assert_not_called()
+        self.assertEqual({path.name: path.read_bytes() for path in (self.job / 'geo').glob('*.geo')}, before)
+        manifest_names = [line.split('\t')[3] for line in (self.job / 'results.tsv').read_text().splitlines()]
+        self.assertEqual(set(manifest_names), set(before))
 
     def test_resume_preserves_finished_results_and_requeues_interrupted_work(self):
         self.publish(self.event())

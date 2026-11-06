@@ -150,6 +150,16 @@ def refresh_results(job):
     return True
 
 
+def finding_filename(identifier, event):
+    """Readable type/score prefix and stable identity for ties and interrupted work."""
+    kind = event['theorem'].partition(':')[0].strip()
+    kind = re.sub(r'[^A-Za-z0-9_-]', '_', kind)[:64] or 'Unknown'
+    score = event.get('ranking')
+    if isinstance(score, bool) or not isinstance(score, (int, float)) or not math.isfinite(score):
+        score = 'unrated'
+    return f'{kind}_{score}__{identifier}.geo'
+
+
 def process_event(job, identifier, event, extending=True, check_ms=1000):
     """One isolated process per check: crashes and timeouts never imply acceptance."""
     task_dir = job / 'tasks' / identifier
@@ -188,7 +198,7 @@ def process_event(job, identifier, event, extending=True, check_ms=1000):
         files = list(staging.glob('*.geo'))
         if converted.returncode or len(files) != 1:
             raise RuntimeError(f'Conversion failed ({converted.returncode}); see {diagnostic}')
-        filename = identifier + '.geo'
+        filename = finding_filename(identifier, event)
         files[0].replace(job / 'geo' / filename)
         return {'state': 'ready' if extending else 'unchecked', 'geo': filename}
     except subprocess.TimeoutExpired as error:
