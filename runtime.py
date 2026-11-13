@@ -157,6 +157,17 @@ EqualLineSegments: A, D, D, B - total ranking 1
     report = check(checks, timeout=60)
     if report['rejected'] != ['BAD_redundant.geo'] or report['not_rejected'] != ['essential.geo']:
         raise RuntimeError('Неожиданный результат smoke-проверки Extending.')
+    # A construction's defining midpoint/midline facts must be filtered, and
+    # Incidence must survive conversion and reach the structured Haskell checker.
+    custom_fixture = output / 'custom-fixture.txt'
+    custom_fixture.write_text(fixture.read_text().replace(
+        'D = Midpoint(A, B)', 'l = Midline(A, B, C)\nD = HeightMiddle(A, B, C)').replace(
+        'EqualLineSegments: A, D, D, B', 'Incidence: D, l'))
+    custom_files = convert(custom_fixture, output / 'custom-converter')
+    response = subprocess.run([str(EXTENDING), '--check-file', str(custom_files[0]), '2000'],
+                              text=True, capture_output=True, timeout=7, check=True)
+    if json.loads(response.stdout).get('status') != 'rejected':
+        raise RuntimeError('HeightMiddle/Midline must be rejected as a defining construction fact.')
     run_pipeline(ROOT / 'examples/input_projections.txt', output / 'job', extending=False, timeout=120)
     if not list((output / 'job/geo').glob('*.geo')):
         raise RuntimeError('Пример GeoGen не дал ни одной задачи для конвертации.')
@@ -173,6 +184,46 @@ EqualLineSegments: A, D, D, B - total ranking 1
         pending = db.execute("SELECT count(*) FROM tasks WHERE state IN ('queued','processing')").fetchone()[0]
     if ready < 1 or pending:
         raise RuntimeError('Поток не выдал проверенных задач или не завершил очередь.')
+    custom_story = output / 'custom-story.txt'
+    custom_story.write_text('''Constructions:
+
+ HeightMiddle
+
+Initial configuration:
+
+ Triangle: A, B, C
+ l = Midline(A, B, C)
+
+Iterations: 1
+MaximalPoints: 1
+MaximalLines: 0
+MaximalCircles: 0
+SymmetryGenerationMode: GenerateBothSymmetricAndAsymmetric
+''')
+    custom_job = run_stream(custom_story, output / 'custom-stream-job', timeout=120)
+    with sqlite3.connect(custom_job / 'tasks.sqlite') as db:
+        if db.execute('SELECT count(*) FROM tasks').fetchone()[0]:
+            raise RuntimeError('GeoGen still publishes the defining HeightMiddle/Midline fact.')
+    contact_story = output / 'contact-story.txt'
+    contact_story.write_text('''Constructions:
+
+ IncircleTangentPoint
+
+Initial configuration:
+
+ Triangle: A, B, C
+ c = Incircle(A, B, C)
+
+Iterations: 1
+MaximalPoints: 1
+MaximalLines: 0
+MaximalCircles: 0
+SymmetryGenerationMode: GenerateBothSymmetricAndAsymmetric
+''')
+    contact_job = run_stream(contact_story, output / 'contact-stream-job', timeout=120)
+    with sqlite3.connect(contact_job / 'tasks.sqlite') as db:
+        if db.execute('SELECT count(*) FROM tasks').fetchone()[0]:
+            raise RuntimeError('GeoGen still publishes defining incircle contact facts.')
     if not VIEWER.is_file():
         raise RuntimeError('Не найден launcher Geometry.')
     print('SMOKE OK: GeoGen → JVM-конвертер → .geo; Extending на контрольных примерах; Geometry упакован.')

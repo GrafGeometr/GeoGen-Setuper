@@ -1,0 +1,670 @@
+diff --git a/Source/Library/GeoGen.Core/Constructions/ComposedConstructions.cs b/Source/Library/GeoGen.Core/Constructions/ComposedConstructions.cs
+index 3374d58..483d9c1 100644
+--- a/Source/Library/GeoGen.Core/Constructions/ComposedConstructions.cs
++++ b/Source/Library/GeoGen.Core/Constructions/ComposedConstructions.cs
+@@ -639,7 +639,7 @@ namespace GeoGen.Core
+                 };
+ 
+                 // Create the actual construction
+-                return new ComposedConstruction(nameof(Isotomic), configuration, parameters);
++                return new ComposedConstruction(nameof(Antigonal), configuration, parameters);
+             }
+         }
+ 
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/BisectorMiddle_definition.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/BisectorMiddle_definition.txt
+new file mode 100644
+index 0000000..c13f46f
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/BisectorMiddle_definition.txt
+@@ -0,0 +1,10 @@
++Objects:
++
++ X = BisectorMiddle(A, B, C)
++ T = BisectorEnd(A, B, C)
++
++Theorems:
++
++Implications:
++
++ () => EqualObjects: X, Midpoint(A, T)
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/BisectorMiddle_line.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/BisectorMiddle_line.txt
+new file mode 100644
+index 0000000..dea1862
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/BisectorMiddle_line.txt
+@@ -0,0 +1,10 @@
++Objects:
++
++ X = BisectorMiddle(A, B, C)
++ l = InternalAngleBisector(A, B, C)
++
++Theorems:
++
++Implications:
++
++ () => Incidence: X, l
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/BisectorMiddle_midline.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/BisectorMiddle_midline.txt
+new file mode 100644
+index 0000000..1bfadc2
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/BisectorMiddle_midline.txt
+@@ -0,0 +1,10 @@
++Objects:
++
++ X = BisectorMiddle(A, B, C)
++ l = Midline(A, B, C)
++
++Theorems:
++
++Implications:
++
++ () => Incidence: X, l
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/BisectorMiddle_side_midpoints.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/BisectorMiddle_side_midpoints.txt
+new file mode 100644
+index 0000000..f4ac824
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/BisectorMiddle_side_midpoints.txt
+@@ -0,0 +1,11 @@
++Objects:
++
++ X = BisectorMiddle(A, B, C)
++ D = Midpoint(A, B)
++ E = Midpoint(A, C)
++
++Theorems:
++
++Implications:
++
++ () => CollinearPoints: D, E, X
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/CenterOfNegativeHomothety_centers.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/CenterOfNegativeHomothety_centers.txt
+new file mode 100644
+index 0000000..fbd412f
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/CenterOfNegativeHomothety_centers.txt
+@@ -0,0 +1,11 @@
++Objects:
++
++ X = CenterOfNegativeHomothety(c, d)
++ O = CenterOfCircle(c)
++ P = CenterOfCircle(d)
++
++Theorems:
++
++Implications:
++
++ () => CollinearPoints: O, P, X
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/CenterOfPositiveHomothety_centers.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/CenterOfPositiveHomothety_centers.txt
+new file mode 100644
+index 0000000..52d4bd2
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/CenterOfPositiveHomothety_centers.txt
+@@ -0,0 +1,11 @@
++Objects:
++
++ X = CenterOfPositiveHomothety(c, d)
++ O = CenterOfCircle(c)
++ P = CenterOfCircle(d)
++
++Theorems:
++
++Implications:
++
++ () => CollinearPoints: O, P, X
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/ExternalBisectorMiddle_definition.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/ExternalBisectorMiddle_definition.txt
+new file mode 100644
+index 0000000..34dfb6e
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/ExternalBisectorMiddle_definition.txt
+@@ -0,0 +1,10 @@
++Objects:
++
++ X = ExternalBisectorMiddle(A, B, C)
++ T = ExternalBisectorEnd(A, B, C)
++
++Theorems:
++
++Implications:
++
++ () => EqualObjects: X, Midpoint(A, T)
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/ExternalBisectorMiddle_line.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/ExternalBisectorMiddle_line.txt
+new file mode 100644
+index 0000000..c184fa5
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/ExternalBisectorMiddle_line.txt
+@@ -0,0 +1,10 @@
++Objects:
++
++ X = ExternalBisectorMiddle(A, B, C)
++ l = ExternalAngleBisector(A, B, C)
++
++Theorems:
++
++Implications:
++
++ () => Incidence: X, l
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/ExternalBisectorMiddle_midline.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/ExternalBisectorMiddle_midline.txt
+new file mode 100644
+index 0000000..24be3a6
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/ExternalBisectorMiddle_midline.txt
+@@ -0,0 +1,10 @@
++Objects:
++
++ X = ExternalBisectorMiddle(A, B, C)
++ l = Midline(A, B, C)
++
++Theorems:
++
++Implications:
++
++ () => Incidence: X, l
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/ExternalBisectorMiddle_side_midpoints.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/ExternalBisectorMiddle_side_midpoints.txt
+new file mode 100644
+index 0000000..fcce515
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/ExternalBisectorMiddle_side_midpoints.txt
+@@ -0,0 +1,11 @@
++Objects:
++
++ X = ExternalBisectorMiddle(A, B, C)
++ D = Midpoint(A, B)
++ E = Midpoint(A, C)
++
++Theorems:
++
++Implications:
++
++ () => CollinearPoints: D, E, X
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/HeightMiddle_definition.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/HeightMiddle_definition.txt
+new file mode 100644
+index 0000000..6647c0f
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/HeightMiddle_definition.txt
+@@ -0,0 +1,10 @@
++Objects:
++
++ X = HeightMiddle(A, B, C)
++ T = PerpendicularProjectionOnLineFromPoints(A, B, C)
++
++Theorems:
++
++Implications:
++
++ () => EqualObjects: X, Midpoint(A, T)
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/HeightMiddle_line.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/HeightMiddle_line.txt
+new file mode 100644
+index 0000000..f31f018
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/HeightMiddle_line.txt
+@@ -0,0 +1,10 @@
++Objects:
++
++ X = HeightMiddle(A, B, C)
++ l = PerpendicularLineToLineFromPoints(A, B, C)
++
++Theorems:
++
++Implications:
++
++ () => Incidence: X, l
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/HeightMiddle_midline.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/HeightMiddle_midline.txt
+new file mode 100644
+index 0000000..1e66609
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/HeightMiddle_midline.txt
+@@ -0,0 +1,10 @@
++Objects:
++
++ X = HeightMiddle(A, B, C)
++ l = Midline(A, B, C)
++
++Theorems:
++
++Implications:
++
++ () => Incidence: X, l
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/HeightMiddle_side_midpoints.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/HeightMiddle_side_midpoints.txt
+new file mode 100644
+index 0000000..701889d
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/HeightMiddle_side_midpoints.txt
+@@ -0,0 +1,11 @@
++Objects:
++
++ X = HeightMiddle(A, B, C)
++ D = Midpoint(A, B)
++ E = Midpoint(A, C)
++
++Theorems:
++
++Implications:
++
++ () => CollinearPoints: D, E, X
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/InversionOfPoint_centers.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/InversionOfPoint_centers.txt
+new file mode 100644
+index 0000000..b39c988
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/InversionOfPoint_centers.txt
+@@ -0,0 +1,10 @@
++Objects:
++
++ X = InversionOfPoint(A, c)
++ O = CenterOfCircle(c)
++
++Theorems:
++
++Implications:
++
++ () => CollinearPoints: O, A, X
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/MedianMiddle_definition.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/MedianMiddle_definition.txt
+new file mode 100644
+index 0000000..684dd9a
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/MedianMiddle_definition.txt
+@@ -0,0 +1,10 @@
++Objects:
++
++ X = MedianMiddle(A, B, C)
++ T = Midpoint(B, C)
++
++Theorems:
++
++Implications:
++
++ () => EqualObjects: X, Midpoint(A, T)
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/MedianMiddle_line.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/MedianMiddle_line.txt
+new file mode 100644
+index 0000000..1aabf60
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/MedianMiddle_line.txt
+@@ -0,0 +1,10 @@
++Objects:
++
++ X = MedianMiddle(A, B, C)
++ l = Median(A, B, C)
++
++Theorems:
++
++Implications:
++
++ () => Incidence: X, l
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/MedianMiddle_midline.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/MedianMiddle_midline.txt
+new file mode 100644
+index 0000000..f79a146
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/MedianMiddle_midline.txt
+@@ -0,0 +1,10 @@
++Objects:
++
++ X = MedianMiddle(A, B, C)
++ l = Midline(A, B, C)
++
++Theorems:
++
++Implications:
++
++ () => Incidence: X, l
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/MedianMiddle_side_midpoints.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/MedianMiddle_side_midpoints.txt
+new file mode 100644
+index 0000000..e58bd37
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/MedianMiddle_side_midpoints.txt
+@@ -0,0 +1,11 @@
++Objects:
++
++ X = MedianMiddle(A, B, C)
++ D = Midpoint(A, B)
++ E = Midpoint(A, C)
++
++Theorems:
++
++Implications:
++
++ () => CollinearPoints: D, E, X
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/RadiusLineMiddle_definition.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/RadiusLineMiddle_definition.txt
+new file mode 100644
+index 0000000..c0d3966
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/RadiusLineMiddle_definition.txt
+@@ -0,0 +1,10 @@
++Objects:
++
++ X = RadiusLineMiddle(A, B, C)
++ T = RadiusLineEnd(A, B, C)
++
++Theorems:
++
++Implications:
++
++ () => EqualObjects: X, Midpoint(A, T)
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/RadiusLineMiddle_line.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/RadiusLineMiddle_line.txt
+new file mode 100644
+index 0000000..55fa842
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/RadiusLineMiddle_line.txt
+@@ -0,0 +1,10 @@
++Objects:
++
++ X = RadiusLineMiddle(A, B, C)
++ l = RadiusLine(A, B, C)
++
++Theorems:
++
++Implications:
++
++ () => Incidence: X, l
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/RadiusLineMiddle_midline.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/RadiusLineMiddle_midline.txt
+new file mode 100644
+index 0000000..e67fdde
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/RadiusLineMiddle_midline.txt
+@@ -0,0 +1,10 @@
++Objects:
++
++ X = RadiusLineMiddle(A, B, C)
++ l = Midline(A, B, C)
++
++Theorems:
++
++Implications:
++
++ () => Incidence: X, l
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/RadiusLineMiddle_side_midpoints.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/RadiusLineMiddle_side_midpoints.txt
+new file mode 100644
+index 0000000..641375a
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/RadiusLineMiddle_side_midpoints.txt
+@@ -0,0 +1,11 @@
++Objects:
++
++ X = RadiusLineMiddle(A, B, C)
++ D = Midpoint(A, B)
++ E = Midpoint(A, C)
++
++Theorems:
++
++Implications:
++
++ () => CollinearPoints: D, E, X
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/SymedianMiddle_definition.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/SymedianMiddle_definition.txt
+new file mode 100644
+index 0000000..8d2d9e1
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/SymedianMiddle_definition.txt
+@@ -0,0 +1,10 @@
++Objects:
++
++ X = SymedianMiddle(A, B, C)
++ T = SymedianEnd(A, B, C)
++
++Theorems:
++
++Implications:
++
++ () => EqualObjects: X, Midpoint(A, T)
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/SymedianMiddle_line.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/SymedianMiddle_line.txt
+new file mode 100644
+index 0000000..7e71c4a
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/SymedianMiddle_line.txt
+@@ -0,0 +1,10 @@
++Objects:
++
++ X = SymedianMiddle(A, B, C)
++ l = Symedian(A, B, C)
++
++Theorems:
++
++Implications:
++
++ () => Incidence: X, l
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/SymedianMiddle_midline.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/SymedianMiddle_midline.txt
+new file mode 100644
+index 0000000..81fff09
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/SymedianMiddle_midline.txt
+@@ -0,0 +1,10 @@
++Objects:
++
++ X = SymedianMiddle(A, B, C)
++ l = Midline(A, B, C)
++
++Theorems:
++
++Implications:
++
++ () => Incidence: X, l
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/SymedianMiddle_side_midpoints.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/SymedianMiddle_side_midpoints.txt
+new file mode 100644
+index 0000000..ae83687
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/CustomConstructions/SymedianMiddle_side_midpoints.txt
+@@ -0,0 +1,11 @@
++Objects:
++
++ X = SymedianMiddle(A, B, C)
++ D = Midpoint(A, B)
++ E = Midpoint(A, C)
++
++Theorems:
++
++Implications:
++
++ () => CollinearPoints: D, E, X
+diff --git a/Source/Library/GeoGen.TheoremProver.ObjectIntroductionRuleProvider/Rules/object_introduction_rules.txt b/Source/Library/GeoGen.TheoremProver.ObjectIntroductionRuleProvider/Rules/object_introduction_rules.txt
+index e6269ec..9c76d29 100644
+--- a/Source/Library/GeoGen.TheoremProver.ObjectIntroductionRuleProvider/Rules/object_introduction_rules.txt
++++ b/Source/Library/GeoGen.TheoremProver.ObjectIntroductionRuleProvider/Rules/object_introduction_rules.txt
+@@ -70,4 +70,39 @@ P = MidpointOfOppositeArc(A, B, C)
+   - InternalAngleBisector(A, B, C)
+ 
+ c = CircleWithDiameter(A, B)
+-  - Midpoint(A, B)
+\ No newline at end of file
++  - Midpoint(A, B)
++
++X = HeightMiddle(A, B, C)
++  - Midline(A, B, C)
++  - PerpendicularProjectionOnLineFromPoints(A, B, C)
++
++X = MedianMiddle(A, B, C)
++  - Midline(A, B, C)
++  - Midpoint(B, C)
++
++X = BisectorMiddle(A, B, C)
++  - Midline(A, B, C)
++  - BisectorEnd(A, B, C)
++
++X = ExternalBisectorMiddle(A, B, C)
++  - Midline(A, B, C)
++  - ExternalBisectorEnd(A, B, C)
++
++X = SymedianMiddle(A, B, C)
++  - Midline(A, B, C)
++  - SymedianEnd(A, B, C)
++
++X = RadiusLineMiddle(A, B, C)
++  - Midline(A, B, C)
++  - RadiusLineEnd(A, B, C)
++
++X = InversionOfPoint(A, c)
++  - CenterOfCircle(c)
++
++X = CenterOfNegativeHomothety(c, d)
++  - CenterOfCircle(c)
++  - CenterOfCircle(d)
++
++X = CenterOfPositiveHomothety(c, d)
++  - CenterOfCircle(c)
++  - CenterOfCircle(d)
+diff --git a/Source/Library/GeoGen.TheoremProver/TrivialTheorems/TrivialTheoremProducer.cs b/Source/Library/GeoGen.TheoremProver/TrivialTheorems/TrivialTheoremProducer.cs
+index eeacc17..ee81ad1 100644
+--- a/Source/Library/GeoGen.TheoremProver/TrivialTheorems/TrivialTheoremProducer.cs
++++ b/Source/Library/GeoGen.TheoremProver/TrivialTheorems/TrivialTheoremProducer.cs
+@@ -251,7 +251,12 @@ namespace GeoGen.TheoremProver
+                                 new Theorem(Incidence, constructedObject, objects[1])
+                             };
+ 
+-                        // Center of circle brings nothing :/
++                        // These constructions have no unconditional theorem expressible solely
++                        // with their point/circle arguments. Relations involving centers
++                        // are supplied by inference rules when those centers are available.
++                        case InversionOfPoint:
++                        case CenterOfNegativeHomothety:
++                        case CenterOfPositiveHomothety:
+                         case CenterOfCircle:
+                             return Array.Empty<Theorem>();
+ 
+diff --git a/Source/Tests/UnitTests/GeoGen.Core.Tests/ConstructionsTest.cs b/Source/Tests/UnitTests/GeoGen.Core.Tests/ConstructionsTest.cs
+index 54f7de4..aef91f5 100644
+--- a/Source/Tests/UnitTests/GeoGen.Core.Tests/ConstructionsTest.cs
++++ b/Source/Tests/UnitTests/GeoGen.Core.Tests/ConstructionsTest.cs
+@@ -10,6 +10,20 @@ namespace GeoGen.Core.Tests
+     [TestFixture]
+     public class ConstructionsTest
+     {
++        [Test]
++        public void Composed_Construction_Names_Match_Properties_And_Are_Unique()
++        {
++            var properties = typeof(ComposedConstructions).GetProperties();
++            var names = properties.Select(property =>
++            {
++                var construction = (ComposedConstruction)property.GetValue(null);
++                construction.Name.Should().Be(property.Name);
++                return construction.Name;
++            }).ToArray();
++            names.Should().OnlyHaveUniqueItems();
++            ComposedConstructions.Antigonal.Should().NotBe(ComposedConstructions.Isotomic);
++        }
++
+         [Test]
+         public void Test_That_All_Predefined_Constructions_Are_Accessible()
+         {
+diff --git a/Source/Tests/UnitTests/GeoGen.TheoremProver.Tests/CustomConstructionsTest.cs b/Source/Tests/UnitTests/GeoGen.TheoremProver.Tests/CustomConstructionsTest.cs
+new file mode 100644
+index 0000000..e15a484
+--- /dev/null
++++ b/Source/Tests/UnitTests/GeoGen.TheoremProver.Tests/CustomConstructionsTest.cs
+@@ -0,0 +1,103 @@
++using FluentAssertions;
++using GeoGen.Constructor;
++using GeoGen.Core;
++using GeoGen.Infrastructure;
++using GeoGen.TheoremFinder;
++using GeoGen.TheoremProver.InferenceRuleProvider;
++using GeoGen.TheoremProver.ObjectIntroductionRuleProvider;
++using Ninject;
++using NUnit.Framework;
++using static GeoGen.Core.ConfigurationObjectType;
++using static GeoGen.Core.ComposedConstructions;
++using static GeoGen.Core.PredefinedConstructions;
++
++namespace GeoGen.TheoremProver.Tests
++{
++    public class CustomConstructionsTest
++    {
++        private IKernel kernel;
++
++        [OneTimeSetUp]
++        public async Task Setup()
++        {
++            kernel = NinjectUtilities.CreateKernel().AddConstructor().AddTheoremFinder(new TheoremFindingSettings(
++                Enum.GetValues<TheoremType>().Except(new[] { TheoremType.EqualObjects }).ToArray(),
++                new TangentCirclesTheoremFinderSettings(false), new LineTangentToCircleTheoremFinderSettings(false)));
++            var rules = await new InferenceRuleProvider.InferenceRuleProvider(new InferenceRuleProviderSettings(
++                Path.Combine(TestContext.CurrentContext.TestDirectory, "InferenceRules"), "txt")).GetInferenceRulesAsync();
++            var introductions = await new ObjectIntroductionRuleProvider.ObjectIntroductionRuleProvider(new ObjectIntroductionRuleProviderSettings(
++                Path.Combine(TestContext.CurrentContext.TestDirectory, "object_introduction_rules.txt"))).GetObjectIntroductionRulesAsync();
++            kernel.AddTheoremProver(new TheoremProvingSettings(new InferenceRuleManagerData(rules), new ObjectIntroducerData(introductions),
++                new TheoremProverSettings(assumeThatSimplifiableTheoremsAreTrue: false, findTrivialTheoremsOnlyForLastObject: false)));
++        }
++
++        [OneTimeTearDown]
++        public void Teardown() => kernel.Dispose();
++
++        private void AssertProved(Configuration configuration, params Theorem[] targets)
++        {
++            var (pictures, data) = kernel.Get<IGeometryConstructor>().ConstructWithUniformLayout(configuration, 3);
++            data.InconstructibleObject.Should().BeNull();
++            (data.Duplicates == default).Should().BeTrue();
++            var picture = new ContextualPicture(pictures);
++            var facts = kernel.Get<ITheoremFinder>().FindAllTheorems(picture);
++            facts.AllObjects.Should().Contain(targets);
++            var proofs = kernel.Get<ITheoremProver>().ProveTheoremsAndConstructProofs(new TheoremMap(), facts, picture);
++            proofs.Keys.Should().Contain(targets);
++        }
++
++        [TestCase("HeightMiddle")]
++        [TestCase("MedianMiddle")]
++        [TestCase("BisectorMiddle")]
++        [TestCase("ExternalBisectorMiddle")]
++        [TestCase("SymedianMiddle")]
++        [TestCase("RadiusLineMiddle")]
++        public void Middle_Lies_On_Midline_And_Line_Through_Side_Midpoints(string name)
++        {
++            var A = new LooseConfigurationObject(Point); var B = new LooseConfigurationObject(Point); var C = new LooseConfigurationObject(Point);
++            var X = new ConstructedConfigurationObject(Constructions.GetComposedConstruction(name), A, B, C);
++            var line = new ConstructedConfigurationObject(Midline, A, B, C);
++            var D = new ConstructedConfigurationObject(Midpoint, A, B);
++            var E = new ConstructedConfigurationObject(Midpoint, A, C);
++            var holder = new LooseObjectHolder(new[] { A, B, C }, LooseObjectLayout.Triangle);
++            var target1 = new Theorem(TheoremType.Incidence, X, line);
++            var target2 = new Theorem(TheoremType.CollinearPoints, D, E, X);
++            AssertProved(new Configuration(holder, new[] { line, D, E, X }), target1, target2);
++            AssertProved(new Configuration(holder, new[] { X, E, D, line }), target1, target2);
++        }
++
++        [TestCase("HeightMiddle", "PerpendicularProjectionOnLineFromPoints")]
++        [TestCase("MedianMiddle", "Midpoint")]
++        [TestCase("BisectorMiddle", "BisectorEnd")]
++        [TestCase("ExternalBisectorMiddle", "ExternalBisectorEnd")]
++        [TestCase("SymedianMiddle", "SymedianEnd")]
++        [TestCase("RadiusLineMiddle", "RadiusLineEnd")]
++        public void Middle_Has_The_Defining_Half_Lengths_And_Lies_On_The_Segment(string middle, string end)
++        {
++            var A = new LooseConfigurationObject(Point); var B = new LooseConfigurationObject(Point); var C = new LooseConfigurationObject(Point);
++            var X = new ConstructedConfigurationObject(Constructions.GetComposedConstruction(middle), A, B, C);
++            var T = end == "Midpoint" ? new ConstructedConfigurationObject(Midpoint, B, C)
++                : new ConstructedConfigurationObject(Constructions.GetComposedConstruction(end), A, B, C);
++            var configuration = new Configuration(new LooseObjectHolder(new[] { A, B, C }, LooseObjectLayout.Triangle), new[] { T, X });
++            AssertProved(configuration, new Theorem(TheoremType.CollinearPoints, A, T, X),
++                new Theorem(TheoremType.EqualLineSegments, new TheoremObject[] { new LineSegmentTheoremObject(A, X), new LineSegmentTheoremObject(T, X) }));
++        }
++
++        [TestCase(PredefinedConstructionType.InversionOfPoint)]
++        [TestCase(PredefinedConstructionType.CenterOfNegativeHomothety)]
++        [TestCase(PredefinedConstructionType.CenterOfPositiveHomothety)]
++        public void Custom_Primitives_Can_Be_Analyzed_And_Related_To_Their_Centers(PredefinedConstructionType type)
++        {
++            var A = new LooseConfigurationObject(Point); var B = new LooseConfigurationObject(Point); var C = new LooseConfigurationObject(Point);
++            var c = new ConstructedConfigurationObject(CircleWithDiameter, A, B);
++            var d = new ConstructedConfigurationObject(Circumcircle, A, B, C);
++            var O = new ConstructedConfigurationObject(CenterOfCircle, c);
++            var P = new ConstructedConfigurationObject(CenterOfCircle, d);
++            var X = type == PredefinedConstructionType.InversionOfPoint ? new ConstructedConfigurationObject(type, C, c)
++                : new ConstructedConfigurationObject(type, c, d);
++            var objects = type == PredefinedConstructionType.InversionOfPoint ? new[] { c, O, X } : new[] { c, d, O, P, X };
++            var target = new Theorem(TheoremType.CollinearPoints, O, type == PredefinedConstructionType.InversionOfPoint ? C : P, X);
++            AssertProved(new Configuration(new LooseObjectHolder(new[] { A, B, C }, LooseObjectLayout.Triangle), objects), target);
++        }
++    }
++}
+diff --git a/Source/Tests/UnitTests/GeoGen.TheoremProver.Tests/GeoGen.TheoremProver.Tests.csproj b/Source/Tests/UnitTests/GeoGen.TheoremProver.Tests/GeoGen.TheoremProver.Tests.csproj
+index 4613241..6a4196e 100644
+--- a/Source/Tests/UnitTests/GeoGen.TheoremProver.Tests/GeoGen.TheoremProver.Tests.csproj
++++ b/Source/Tests/UnitTests/GeoGen.TheoremProver.Tests/GeoGen.TheoremProver.Tests.csproj
+@@ -20,6 +20,14 @@
+ 		<ProjectReference Include="..\..\..\Library\GeoGen.Infrastructure\GeoGen.Infrastructure.csproj" />
+ 		<ProjectReference Include="..\..\..\Library\GeoGen.TheoremProver\GeoGen.TheoremProver.csproj" />
+ 		<ProjectReference Include="..\..\..\Library\GeoGen.Utilities\GeoGen.Utilities.csproj" />
++		<ProjectReference Include="..\..\..\Library\GeoGen.Constructor\GeoGen.Constructor.csproj" />
++		<ProjectReference Include="..\..\..\Library\GeoGen.TheoremFinder\GeoGen.TheoremFinder.csproj" />
++		<ProjectReference Include="..\..\..\Library\GeoGen.TheoremProver.InferenceRuleProvider\GeoGen.TheoremProver.InferenceRuleProvider.csproj" />
++		<ProjectReference Include="..\..\..\Library\GeoGen.TheoremProver.ObjectIntroductionRuleProvider\GeoGen.TheoremProver.ObjectIntroductionRuleProvider.csproj" />
+ 	</ItemGroup>
+ 
++    <ItemGroup>
++        <Content Include="../../../Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/**/*.txt" Link="InferenceRules/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
++        <Content Include="../../../Library/GeoGen.TheoremProver.ObjectIntroductionRuleProvider/Rules/object_introduction_rules.txt" Link="object_introduction_rules.txt" CopyToOutputDirectory="PreserveNewest" />
++    </ItemGroup>
+ </Project>

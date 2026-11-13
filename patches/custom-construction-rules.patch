@@ -1,0 +1,1377 @@
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/antigonal_definition.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/antigonal_definition.txt
+new file mode 100644
+index 0000000..72b50e8
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/antigonal_definition.txt
+@@ -0,0 +1,11 @@
++Objects:
++
++ Q = Antigonal(P, A, B, C)
++ R = ReflectionInLineFromPoints(P, B, C)
++ S = ReflectionInLineFromPoints(P, A, C)
++
++Theorems:
++
++Implications:
++
++ () => EqualObjects: Q, SecondIntersectionOfTwoCircumcircles(C, A, S, B, R)
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/antigonal_reflection_circle.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/antigonal_reflection_circle.txt
+new file mode 100644
+index 0000000..8b2c646
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/antigonal_reflection_circle.txt
+@@ -0,0 +1,10 @@
++Objects:
++
++ Q = Antigonal(P, A, B, C)
++ R = ReflectionInLineFromPoints(P, B, C)
++
++Theorems:
++
++Implications:
++
++ () => ConcyclicPoints: Q, B, C, R
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/bisector_end_incenter.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/bisector_end_incenter.txt
+new file mode 100644
+index 0000000..2252baf
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/bisector_end_incenter.txt
+@@ -0,0 +1,10 @@
++Objects:
++
++ X = BisectorEnd(A, B, C)
++ I = Incenter(A, B, C)
++
++Theorems:
++
++Implications:
++
++ () => CollinearPoints: A, X, I
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/bisector_end_on_bisector.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/bisector_end_on_bisector.txt
+new file mode 100644
+index 0000000..e4791b6
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/bisector_end_on_bisector.txt
+@@ -0,0 +1,10 @@
++Objects:
++
++ X = BisectorEnd(A, B, C)
++ l = InternalAngleBisector(A, B, C)
++
++Theorems:
++
++Implications:
++
++ () => Incidence: X, l
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/dumpty_line.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/dumpty_line.txt
+new file mode 100644
+index 0000000..ffc8447
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/dumpty_line.txt
+@@ -0,0 +1,10 @@
++Objects:
++
++ X = DumptyPoint(A, B, C)
++ l = Symedian(A, B, C)
++
++Theorems:
++
++Implications:
++
++ () => Incidence: X, l
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/dumpty_projection.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/dumpty_projection.txt
+new file mode 100644
+index 0000000..e7c4c16
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/dumpty_projection.txt
+@@ -0,0 +1,12 @@
++Objects:
++
++ X = DumptyPoint(A, B, C)
++ O = Circumcenter(A, B, C)
++ l = Symedian(A, B, C)
++
++Theorems:
++
++Implications:
++
++ () => EqualObjects: X, PerpendicularProjection(O, l)
++ () => PerpendicularLines: [O, X], l
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/dumpty_ray.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/dumpty_ray.txt
+new file mode 100644
+index 0000000..0965ab1
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/dumpty_ray.txt
+@@ -0,0 +1,10 @@
++Objects:
++
++ X = DumptyPoint(A, B, C)
++ T = SymedianEnd(A, B, C)
++
++Theorems:
++
++Implications:
++
++ () => CollinearPoints: A, T, X
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/equal_contact_lengths.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/equal_contact_lengths.txt
+new file mode 100644
+index 0000000..880123a
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/equal_contact_lengths.txt
+@@ -0,0 +1,10 @@
++Objects:
++
++ X = IncircleTangentPoint(A, B, C)
++ Y = IncircleTangentPoint(C, A, B)
++
++Theorems:
++
++Implications:
++
++ () => EqualLineSegments: B, X, B, Y
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/external_bisector_end_excenter.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/external_bisector_end_excenter.txt
+new file mode 100644
+index 0000000..9e86368
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/external_bisector_end_excenter.txt
+@@ -0,0 +1,10 @@
++Objects:
++
++ X = ExternalBisectorEnd(A, B, C)
++ E = Excenter(B, A, C)
++
++Theorems:
++
++Implications:
++
++ () => CollinearPoints: A, X, E
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/external_bisector_end_on_bisector.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/external_bisector_end_on_bisector.txt
+new file mode 100644
+index 0000000..77a9280
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/external_bisector_end_on_bisector.txt
+@@ -0,0 +1,10 @@
++Objects:
++
++ X = ExternalBisectorEnd(A, B, C)
++ l = ExternalAngleBisector(A, B, C)
++
++Theorems:
++
++Implications:
++
++ () => Incidence: X, l
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/feuerbach_definition.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/feuerbach_definition.txt
+new file mode 100644
+index 0000000..2ec8489
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/feuerbach_definition.txt
+@@ -0,0 +1,10 @@
++Objects:
++
++ F = FeuerbachPoint(A, B, C)
++ I = Incenter(A, B, C)
++
++Theorems:
++
++Implications:
++
++ () => EqualObjects: F, PonceletPoint(A, B, C, I)
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/feuerbach_incircle.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/feuerbach_incircle.txt
+new file mode 100644
+index 0000000..77f4b57
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/feuerbach_incircle.txt
+@@ -0,0 +1,10 @@
++Objects:
++
++ F = FeuerbachPoint(A, B, C)
++ c = Incircle(A, B, C)
++
++Theorems:
++
++Implications:
++
++ () => Incidence: F, c
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/feuerbach_nine_point_circle.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/feuerbach_nine_point_circle.txt
+new file mode 100644
+index 0000000..f1505cf
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/feuerbach_nine_point_circle.txt
+@@ -0,0 +1,10 @@
++Objects:
++
++ F = FeuerbachPoint(A, B, C)
++ c = NinePointCircle(A, B, C)
++
++Theorems:
++
++Implications:
++
++ () => Incidence: F, c
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/fpc_diameter.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/fpc_diameter.txt
+new file mode 100644
+index 0000000..47b4d9f
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/fpc_diameter.txt
+@@ -0,0 +1,11 @@
++Objects:
++
++ c = FPC(A, B, C)
++ H = Orthocenter(A, B, C)
++ M = Midpoint(B, C)
++
++Theorems:
++
++Implications:
++
++ () => EqualObjects: c, CircleWithDiameter(H, M)
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/fpc_foot.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/fpc_foot.txt
+new file mode 100644
+index 0000000..3f040d0
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/fpc_foot.txt
+@@ -0,0 +1,10 @@
++Objects:
++
++ c = FPC(A, B, C)
++ X = PerpendicularProjectionOnLineFromPoints(A, B, C)
++
++Theorems:
++
++Implications:
++
++ () => Incidence: X, c
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/fpc_humpty.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/fpc_humpty.txt
+new file mode 100644
+index 0000000..5d5bf91
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/fpc_humpty.txt
+@@ -0,0 +1,10 @@
++Objects:
++
++ c = FPC(A, B, C)
++ X = HumptyPoint(A, B, C)
++
++Theorems:
++
++Implications:
++
++ () => Incidence: X, c
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/fpc_midpoint.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/fpc_midpoint.txt
+new file mode 100644
+index 0000000..f95f453
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/fpc_midpoint.txt
+@@ -0,0 +1,10 @@
++Objects:
++
++ c = FPC(A, B, C)
++ X = Midpoint(B, C)
++
++Theorems:
++
++Implications:
++
++ () => Incidence: X, c
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/fpc_orthocenter.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/fpc_orthocenter.txt
+new file mode 100644
+index 0000000..265b083
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/fpc_orthocenter.txt
+@@ -0,0 +1,10 @@
++Objects:
++
++ c = FPC(A, B, C)
++ X = Orthocenter(A, B, C)
++
++Theorems:
++
++Implications:
++
++ () => Incidence: X, c
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/gergonne_contact_ray.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/gergonne_contact_ray.txt
+new file mode 100644
+index 0000000..694699b
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/gergonne_contact_ray.txt
+@@ -0,0 +1,10 @@
++Objects:
++
++ G = Gergonne(A, B, C)
++ T = IncircleTangentPoint(A, B, C)
++
++Theorems:
++
++Implications:
++
++ () => CollinearPoints: A, T, G
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/gergonne_definition.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/gergonne_definition.txt
+new file mode 100644
+index 0000000..2f0c022
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/gergonne_definition.txt
+@@ -0,0 +1,11 @@
++Objects:
++
++ G = Gergonne(A, B, C)
++ T = IncircleTangentPoint(A, B, C)
++ U = IncircleTangentPoint(B, A, C)
++
++Theorems:
++
++Implications:
++
++ () => EqualObjects: G, IntersectionOfLinesFromPoints(A, T, B, U)
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/harmonic_definition.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/harmonic_definition.txt
+new file mode 100644
+index 0000000..68348d8
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/harmonic_definition.txt
+@@ -0,0 +1,12 @@
++Objects:
++
++ X = Harmonic(A, B, C)
++ c = CircleWithDiameter(B, C)
++ I = InversionOfPoint(A, c)
++ l = LineFromPoints(B, C)
++
++Theorems:
++
++Implications:
++
++ () => EqualObjects: X, ReflectionInLine(l, I)
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/ho_reflection.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/ho_reflection.txt
+new file mode 100644
+index 0000000..13179cc
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/ho_reflection.txt
+@@ -0,0 +1,13 @@
++Objects:
++
++ X = HOPoint(A, B, C)
++ H = PerpendicularProjectionOnLineFromPoints(A, B, C)
++ M = Midpoint(B, C)
++
++Theorems:
++
++Implications:
++
++ () => EqualObjects: X, PointReflection(H, M)
++ () => CollinearPoints: H, M, X
++ () => EqualLineSegments: M, H, M, X
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/humpty_line.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/humpty_line.txt
+new file mode 100644
+index 0000000..830246e
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/humpty_line.txt
+@@ -0,0 +1,10 @@
++Objects:
++
++ X = HumptyPoint(A, B, C)
++ l = Median(A, B, C)
++
++Theorems:
++
++Implications:
++
++ () => Incidence: X, l
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/humpty_projection.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/humpty_projection.txt
+new file mode 100644
+index 0000000..aeb35fc
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/humpty_projection.txt
+@@ -0,0 +1,12 @@
++Objects:
++
++ X = HumptyPoint(A, B, C)
++ O = Orthocenter(A, B, C)
++ l = Median(A, B, C)
++
++Theorems:
++
++Implications:
++
++ () => EqualObjects: X, PerpendicularProjection(O, l)
++ () => PerpendicularLines: [O, X], l
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/humpty_ray.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/humpty_ray.txt
+new file mode 100644
+index 0000000..0f82f4e
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/humpty_ray.txt
+@@ -0,0 +1,10 @@
++Objects:
++
++ X = HumptyPoint(A, B, C)
++ T = Midpoint(B, C)
++
++Theorems:
++
++Implications:
++
++ () => CollinearPoints: A, T, X
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/incircle_contact.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/incircle_contact.txt
+new file mode 100644
+index 0000000..06c9bae
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/incircle_contact.txt
+@@ -0,0 +1,10 @@
++Objects:
++
++ X = IncircleTangentPoint(A, B, C)
++ c = Incircle(A, B, C)
++
++Theorems:
++
++Implications:
++
++ () => Incidence: X, c
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/incircle_contact_projection.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/incircle_contact_projection.txt
+new file mode 100644
+index 0000000..ca16e5e
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/incircle_contact_projection.txt
+@@ -0,0 +1,11 @@
++Objects:
++
++ X = IncircleTangentPoint(A, B, C)
++ I = Incenter(A, B, C)
++
++Theorems:
++
++Implications:
++
++ () => EqualObjects: X, PerpendicularProjectionOnLineFromPoints(I, B, C)
++ () => PerpendicularLines: [I, X], [B, C]
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/isogonal_centroid_recognition.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/isogonal_centroid_recognition.txt
+new file mode 100644
+index 0000000..0469da1
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/isogonal_centroid_recognition.txt
+@@ -0,0 +1,10 @@
++Objects:
++
++ G = Centroid(A, B, C)
++ Q = Isogonal(G, A, B, C)
++
++Theorems:
++
++Implications:
++
++ () => EqualObjects: Q, Lemoine(A, B, C)
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/isogonal_circumcenter_orthocenter.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/isogonal_circumcenter_orthocenter.txt
+new file mode 100644
+index 0000000..4f0b533
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/isogonal_circumcenter_orthocenter.txt
+@@ -0,0 +1,10 @@
++Objects:
++
++ H = Orthocenter(A, B, C)
++ O = Circumcenter(A, B, C)
++
++Theorems:
++
++Implications:
++
++ () => EqualObjects: H, Isogonal(O, A, B, C)
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/isogonal_circumcenter_recognition.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/isogonal_circumcenter_recognition.txt
+new file mode 100644
+index 0000000..bc45d25
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/isogonal_circumcenter_recognition.txt
+@@ -0,0 +1,10 @@
++Objects:
++
++ G = Circumcenter(A, B, C)
++ Q = Isogonal(G, A, B, C)
++
++Theorems:
++
++Implications:
++
++ () => EqualObjects: Q, Orthocenter(A, B, C)
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/isogonal_involution.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/isogonal_involution.txt
+new file mode 100644
+index 0000000..b294b53
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/isogonal_involution.txt
+@@ -0,0 +1,9 @@
++Objects:
++
++ Q = Isogonal(P, A, B, C)
++
++Theorems:
++
++Implications:
++
++ () => EqualObjects: P, Isogonal(Q, A, B, C)
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/isogonal_reflection_ray.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/isogonal_reflection_ray.txt
+new file mode 100644
+index 0000000..252a3f8
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/isogonal_reflection_ray.txt
+@@ -0,0 +1,11 @@
++Objects:
++
++ Q = Isogonal(P, A, B, C)
++ l = InternalAngleBisector(A, B, C)
++ R = ReflectionInLine(l, P)
++
++Theorems:
++
++Implications:
++
++ () => CollinearPoints: A, Q, R
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/isotomic_feet.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/isotomic_feet.txt
+new file mode 100644
+index 0000000..113332a
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/isotomic_feet.txt
+@@ -0,0 +1,13 @@
++Objects:
++
++ Q = Isotomic(P, A, B, C)
++ T = IntersectionOfLinesFromPoints(A, P, B, C)
++ U = IntersectionOfLinesFromPoints(A, Q, B, C)
++ M = Midpoint(B, C)
++
++Theorems:
++
++Implications:
++
++ () => EqualObjects: M, Midpoint(T, U)
++ () => EqualLineSegments: M, T, M, U
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/isotomic_gergonne_recognition.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/isotomic_gergonne_recognition.txt
+new file mode 100644
+index 0000000..6a58987
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/isotomic_gergonne_recognition.txt
+@@ -0,0 +1,10 @@
++Objects:
++
++ G = Gergonne(A, B, C)
++ Q = Isotomic(G, A, B, C)
++
++Theorems:
++
++Implications:
++
++ () => EqualObjects: Q, Nagel(A, B, C)
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/isotomic_involution.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/isotomic_involution.txt
+new file mode 100644
+index 0000000..eb32e5a
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/isotomic_involution.txt
+@@ -0,0 +1,9 @@
++Objects:
++
++ Q = Isotomic(P, A, B, C)
++
++Theorems:
++
++Implications:
++
++ () => EqualObjects: P, Isotomic(Q, A, B, C)
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/lemoine_end_ray.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/lemoine_end_ray.txt
+new file mode 100644
+index 0000000..667aa9b
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/lemoine_end_ray.txt
+@@ -0,0 +1,10 @@
++Objects:
++
++ L = Lemoine(A, B, C)
++ T = SymedianEnd(A, B, C)
++
++Theorems:
++
++Implications:
++
++ () => CollinearPoints: A, L, T
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/lemoine_isogonal_centroid.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/lemoine_isogonal_centroid.txt
+new file mode 100644
+index 0000000..08f2adb
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/lemoine_isogonal_centroid.txt
+@@ -0,0 +1,10 @@
++Objects:
++
++ L = Lemoine(A, B, C)
++ G = Centroid(A, B, C)
++
++Theorems:
++
++Implications:
++
++ () => EqualObjects: L, Isogonal(G, A, B, C)
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/lemoine_symedian.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/lemoine_symedian.txt
+new file mode 100644
+index 0000000..e82dfde
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/lemoine_symedian.txt
+@@ -0,0 +1,10 @@
++Objects:
++
++ L = Lemoine(A, B, C)
++ l = Symedian(A, B, C)
++
++Theorems:
++
++Implications:
++
++ () => Incidence: L, l
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/nagel_excircle_contact_ray.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/nagel_excircle_contact_ray.txt
+new file mode 100644
+index 0000000..5b13623
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/nagel_excircle_contact_ray.txt
+@@ -0,0 +1,11 @@
++Objects:
++
++ N = Nagel(A, B, C)
++ E = Excenter(A, B, C)
++ T = PerpendicularProjectionOnLineFromPoints(E, B, C)
++
++Theorems:
++
++Implications:
++
++ () => CollinearPoints: A, T, N
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/nagel_isotomic_gergonne.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/nagel_isotomic_gergonne.txt
+new file mode 100644
+index 0000000..f15728b
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/nagel_isotomic_gergonne.txt
+@@ -0,0 +1,10 @@
++Objects:
++
++ N = Nagel(A, B, C)
++ G = Gergonne(A, B, C)
++
++Theorems:
++
++Implications:
++
++ () => EqualObjects: N, Isotomic(G, A, B, C)
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/nagel_reflected_contact_ray.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/nagel_reflected_contact_ray.txt
+new file mode 100644
+index 0000000..d4b0ec7
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/nagel_reflected_contact_ray.txt
+@@ -0,0 +1,12 @@
++Objects:
++
++ N = Nagel(A, B, C)
++ T = IncircleTangentPoint(A, B, C)
++ M = Midpoint(B, C)
++ R = PointReflection(T, M)
++
++Theorems:
++
++Implications:
++
++ () => CollinearPoints: A, R, N
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/poncelet_nine_point_circle.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/poncelet_nine_point_circle.txt
+new file mode 100644
+index 0000000..5421f43
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/poncelet_nine_point_circle.txt
+@@ -0,0 +1,10 @@
++Objects:
++
++ P = PonceletPoint(A, B, C, D)
++ c = NinePointCircle(A, B, C)
++
++Theorems:
++
++Implications:
++
++ () => Incidence: P, c
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/poncelet_side_midpoints.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/poncelet_side_midpoints.txt
+new file mode 100644
+index 0000000..f08607d
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/poncelet_side_midpoints.txt
+@@ -0,0 +1,12 @@
++Objects:
++
++ P = PonceletPoint(A, B, C, D)
++ U = Midpoint(A, B)
++ V = Midpoint(B, C)
++ W = Midpoint(C, A)
++
++Theorems:
++
++Implications:
++
++ () => ConcyclicPoints: P, U, V, W
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/quadrilateral_centroid_bimedian.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/quadrilateral_centroid_bimedian.txt
+new file mode 100644
+index 0000000..9beca0d
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/quadrilateral_centroid_bimedian.txt
+@@ -0,0 +1,13 @@
++Objects:
++
++ G = QuadrilateralCentroid(A, B, C, D)
++ M = Midpoint(A, B)
++ N = Midpoint(C, D)
++
++Theorems:
++
++Implications:
++
++ () => EqualObjects: G, Midpoint(M, N)
++ () => CollinearPoints: M, G, N
++ () => EqualLineSegments: G, M, G, N
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/quadrilateral_centroid_triangle.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/quadrilateral_centroid_triangle.txt
+new file mode 100644
+index 0000000..6f06d0d
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/quadrilateral_centroid_triangle.txt
+@@ -0,0 +1,10 @@
++Objects:
++
++ G = QuadrilateralCentroid(A, B, C, D)
++ T = Centroid(A, B, C)
++
++Theorems:
++
++Implications:
++
++ () => CollinearPoints: D, T, G
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/radius_end_center.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/radius_end_center.txt
+new file mode 100644
+index 0000000..dc92e3b
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/radius_end_center.txt
+@@ -0,0 +1,11 @@
++Objects:
++
++ X = RadiusLineEnd(A, B, C)
++ O = Circumcenter(A, B, C)
++
++Theorems:
++
++Implications:
++
++ () => CollinearPoints: A, O, X
++ () => EqualObjects: X, IntersectionOfLinesFromPoints(A, O, B, C)
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/radius_end_on_radius_line.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/radius_end_on_radius_line.txt
+new file mode 100644
+index 0000000..ab71b30
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/radius_end_on_radius_line.txt
+@@ -0,0 +1,10 @@
++Objects:
++
++ X = RadiusLineEnd(A, B, C)
++ l = RadiusLine(A, B, C)
++
++Theorems:
++
++Implications:
++
++ () => Incidence: X, l
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/radius_line_center.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/radius_line_center.txt
+new file mode 100644
+index 0000000..6ab4489
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/radius_line_center.txt
+@@ -0,0 +1,10 @@
++Objects:
++
++ l = RadiusLine(A, B, C)
++ O = Circumcenter(A, B, C)
++
++Theorems:
++
++Implications:
++
++ () => Incidence: O, l
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/symedian_end_on_symedian.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/symedian_end_on_symedian.txt
+new file mode 100644
+index 0000000..3f4111c
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/symedian_end_on_symedian.txt
+@@ -0,0 +1,10 @@
++Objects:
++
++ X = SymedianEnd(A, B, C)
++ l = Symedian(A, B, C)
++
++Theorems:
++
++Implications:
++
++ () => Incidence: X, l
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/symedian_end_ray.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/symedian_end_ray.txt
+new file mode 100644
+index 0000000..89523fe
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/symedian_end_ray.txt
+@@ -0,0 +1,10 @@
++Objects:
++
++ X = SymedianEnd(A, B, C)
++ T = TangentLinesIntersection(A, B, C)
++
++Theorems:
++
++Implications:
++
++ () => CollinearPoints: A, X, T
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/symedian_tangent_intersection.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/symedian_tangent_intersection.txt
+new file mode 100644
+index 0000000..df7fd66
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/symedian_tangent_intersection.txt
+@@ -0,0 +1,10 @@
++Objects:
++
++ X = TangentLinesIntersection(A, B, C)
++ l = Symedian(A, B, C)
++
++Theorems:
++
++Implications:
++
++ () => Incidence: X, l
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/tangent_intersection_inverse.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/tangent_intersection_inverse.txt
+new file mode 100644
+index 0000000..f813de2
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/tangent_intersection_inverse.txt
+@@ -0,0 +1,11 @@
++Objects:
++
++ X = TangentLinesIntersection(A, B, C)
++ M = Midpoint(B, C)
++ c = Circumcircle(A, B, C)
++
++Theorems:
++
++Implications:
++
++ () => EqualObjects: X, InversionOfPoint(M, c)
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/tangent_intersection_on_tangent.txt b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/tangent_intersection_on_tangent.txt
+new file mode 100644
+index 0000000..d68ff15
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/ObjectSpecificRules/AdditionalCustomConstructions/tangent_intersection_on_tangent.txt
+@@ -0,0 +1,10 @@
++Objects:
++
++ X = TangentLinesIntersection(A, B, C)
++ l = TangentLine(B, A, C)
++
++Theorems:
++
++Implications:
++
++ () => Incidence: X, l
+diff --git a/Source/Library/GeoGen.TheoremProver.ObjectIntroductionRuleProvider/Rules/object_introduction_rules.txt b/Source/Library/GeoGen.TheoremProver.ObjectIntroductionRuleProvider/Rules/object_introduction_rules.txt
+index 9c76d29..7d14a97 100644
+--- a/Source/Library/GeoGen.TheoremProver.ObjectIntroductionRuleProvider/Rules/object_introduction_rules.txt
++++ b/Source/Library/GeoGen.TheoremProver.ObjectIntroductionRuleProvider/Rules/object_introduction_rules.txt
+@@ -106,3 +106,99 @@ X = CenterOfNegativeHomothety(c, d)
+ X = CenterOfPositiveHomothety(c, d)
+   - CenterOfCircle(c)
+   - CenterOfCircle(d)
++
++
++X = Harmonic(A, B, C)
++  - CircleWithDiameter(B, C)
++  - LineFromPoints(B, C)
++
++X = IncircleTangentPoint(A, B, C)
++  - Incircle(A, B, C)
++  - Incenter(A, B, C)
++
++X = HumptyPoint(A, B, C)
++  - Median(A, B, C)
++  - Orthocenter(A, B, C)
++
++X = DumptyPoint(A, B, C)
++  - Symedian(A, B, C)
++  - Circumcenter(A, B, C)
++
++X = HOPoint(A, B, C)
++  - Midpoint(B, C)
++  - PerpendicularProjectionOnLineFromPoints(A, B, C)
++
++X = TangentLinesIntersection(A, B, C)
++  - TangentLine(B, A, C)
++  - TangentLine(C, A, B)
++  - Circumcircle(A, B, C)
++  - Midpoint(B, C)
++
++l = Symedian(A, B, C)
++  - TangentLinesIntersection(A, B, C)
++
++X = SymedianEnd(A, B, C)
++  - Symedian(A, B, C)
++
++X = BisectorEnd(A, B, C)
++  - InternalAngleBisector(A, B, C)
++
++X = ExternalBisectorEnd(A, B, C)
++  - ExternalAngleBisector(A, B, C)
++
++l = RadiusLine(A, B, C)
++  - Circumcenter(A, B, C)
++
++X = RadiusLineEnd(A, B, C)
++  - RadiusLine(A, B, C)
++  - Circumcenter(A, B, C)
++
++G = Gergonne(A, B, C)
++  - IncircleTangentPoint(A, B, C)
++  - IncircleTangentPoint(B, A, C)
++  - IncircleTangentPoint(C, A, B)
++
++N = Nagel(A, B, C)
++  - Gergonne(A, B, C)
++  - IncircleTangentPoint(A, B, C)
++  - Midpoint(B, C)
++
++L = Lemoine(A, B, C)
++  - Symedian(A, B, C)
++  - Symedian(B, A, C)
++  - Symedian(C, A, B)
++
++P = PonceletPoint(A, B, C, D)
++  - NinePointCircle(A, B, C)
++  - NinePointCircle(A, B, D)
++  - NinePointCircle(A, C, D)
++  - NinePointCircle(B, C, D)
++
++F = FeuerbachPoint(A, B, C)
++  - Incircle(A, B, C)
++  - NinePointCircle(A, B, C)
++  - Incenter(A, B, C)
++
++G = QuadrilateralCentroid(A, B, C, D)
++  - Midpoint(A, B)
++  - Midpoint(C, D)
++  - Centroid(A, B, C)
++
++c = FPC(A, B, C)
++  - Orthocenter(A, B, C)
++  - Midpoint(B, C)
++  - PerpendicularProjectionOnLineFromPoints(A, B, C)
++
++Q = Isogonal(P, A, B, C)
++  - InternalAngleBisector(A, B, C)
++  - InternalAngleBisector(B, A, C)
++  - InternalAngleBisector(C, A, B)
++
++Q = Isotomic(P, A, B, C)
++  - Midpoint(B, C)
++  - IntersectionOfLinesFromPoints(A, P, B, C)
++
++Q = Antigonal(P, A, B, C)
++  - ReflectionInLineFromPoints(P, B, C)
++  - ReflectionInLineFromPoints(P, A, C)
++  - ReflectionInLineFromPoints(P, A, B)
+diff --git a/Source/Library/GeoGen.TheoremProver/InferenceRules/Applier/InferenceRuleApplier.cs b/Source/Library/GeoGen.TheoremProver/InferenceRules/Applier/InferenceRuleApplier.cs
+index 83085ee..6384abc 100644
+--- a/Source/Library/GeoGen.TheoremProver/InferenceRules/Applier/InferenceRuleApplier.cs
++++ b/Source/Library/GeoGen.TheoremProver/InferenceRules/Applier/InferenceRuleApplier.cs
+@@ -339,7 +339,7 @@ namespace GeoGen.TheoremProver
+                             // While premapping, we need to take into account that we might have created artificial
+                             // objects such as LineTheoremObject with an explicit object LineFromPoints(A, B) and we 
+                             // need to replace these with implicit ones to get a clear statement that is expected
+-                            flattenObjectsFromPoints: true), mapping);
++                            flattenObjectsFromPoints: input.InferenceRule.Conclusion.Type != TheoremType.EqualObjects), mapping);
+                 })
+                 // Take only those pairs where the conclusion has been successfully remapped
+                 .Where(pair => pair.conclusion != null)
+@@ -360,7 +360,7 @@ namespace GeoGen.TheoremProver
+                             // While premapping, we need to take into account that we might have created artificial
+                             // objects such as LineTheoremObject with an explicit object LineFromPoints(A, B) and we 
+                             // need to replace these with implicit ones to get a clear statement that is expected
+-                            flattenObjectsFromPoints: true))
++                            flattenObjectsFromPoints: assumption.Type != TheoremType.EqualObjects))
+                         // Include the used equalities as assumptions
+                         .Concat(pair.mapping.UsedEqualities)
+                         // Enumerate
+diff --git a/Source/Library/GeoGen.TheoremProver/TheoremNotation.cs b/Source/Library/GeoGen.TheoremProver/TheoremNotation.cs
+new file mode 100644
+index 0000000..5893e2c
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver/TheoremNotation.cs
+@@ -0,0 +1,18 @@
++using GeoGen.Core;
++using GeoGen.Utilities;
++
++namespace GeoGen.TheoremProver
++{
++    internal static class TheoremNotation
++    {
++        internal static Theorem Flatten(Theorem theorem)
++        {
++            // EqualObjects operands must each remain one configuration object.
++            if (theorem.Type == TheoremType.EqualObjects)
++                return theorem;
++            var identity = theorem.GetInnerConfigurationObjects().GetDefiningObjects()
++                .Distinct().ToDictionary(obj => obj, obj => obj);
++            return theorem.Remap(identity, flattenObjectsFromPoints: true);
++        }
++    }
++}
+diff --git a/Source/Library/GeoGen.TheoremProver/TheoremProofTree/TheoremProofBuilder.cs b/Source/Library/GeoGen.TheoremProver/TheoremProofTree/TheoremProofBuilder.cs
+index 72164f6..5fea5e7 100644
+--- a/Source/Library/GeoGen.TheoremProver/TheoremProofTree/TheoremProofBuilder.cs
++++ b/Source/Library/GeoGen.TheoremProver/TheoremProofTree/TheoremProofBuilder.cs
+@@ -38,6 +38,10 @@ namespace GeoGen.TheoremProver
+         /// <returns>The dictionary mapping proved theorems to their proofs.</returns>
+         public IReadOnlyDictionary<Theorem, TheoremProof> BuildProofs(IEnumerable<Theorem> theorems)
+         {
++            theorems = theorems.ToArray();
++            foreach (var theorem in theorems)
++                EnsureNotationProof(theorem);
++
+             // Prepare a dictionary mapping theorems to their proofs
+             var proofDictionary = new Dictionary<Theorem, TheoremProof>();
+ 
+@@ -113,6 +117,9 @@ namespace GeoGen.TheoremProver
+         /// <param name="assumptions">The assumptions that imply the conclusion.</param>
+         public void AddImplication(TheoremInferenceData inferenceData, Theorem conclusion, IEnumerable<Theorem> assumptions)
+         {
++            foreach (var assumption in assumptions.ToArray())
++                EnsureNotationProof(assumption);
++
+             #region Trying to infer unproved EqualObjects assumptions
+ 
+             // The equality helper has taken care of equality assumptions that might be inferred via transitivity.
+@@ -213,6 +220,29 @@ namespace GeoGen.TheoremProver
+ 
+         #region Private methods
+ 
++        // A notation change can only reuse an existing proof or a literal
++        // defining-point incidence. It cannot establish a new geometric claim.
++        private void EnsureNotationProof(Theorem theorem)
++        {
++            if (_knowledgeBase.ContainsKey(theorem) || theorem.Type == EqualObjects)
++                return;
++            var flattened = TheoremNotation.Flatten(theorem);
++            if (flattened.Type == Incidence)
++            {
++                var point = flattened.InvolvedObjects.OfType<PointTheoremObject>().Single();
++                var shape = flattened.InvolvedObjects.OfType<TheoremObjectWithPoints>().Single();
++                if (shape.DefinedByPoints && shape.Points.Contains(point.ConfigurationObject))
++                {
++                    _knowledgeBase.Add(theorem, (new TheoremInferenceData(TrivialTheorem), Array.Empty<Theorem>()));
++                    return;
++                }
++            }
++            var equivalent = _knowledgeBase.Keys.FirstOrDefault(known => known.Type == theorem.Type
++                && Equals(TheoremNotation.Flatten(known), flattened));
++            if (equivalent != null)
++                _knowledgeBase.Add(theorem, (new TheoremInferenceData(ReformulatedTheorem), new[] { equivalent }));
++        }
++
+         /// <summary>
+         /// Ensures that a given theorem of type <see cref="EqualObjects"/> is marked in the <see cref="_equalityHelper"/>
+         /// and all the subsequently inferred equalities are added to the <see cref="_knowledgeBase"/>.
+diff --git a/Source/Library/GeoGen.TheoremProver/TheoremProver.cs b/Source/Library/GeoGen.TheoremProver/TheoremProver.cs
+index 80ebc12..9b845b4 100644
+--- a/Source/Library/GeoGen.TheoremProver/TheoremProver.cs
++++ b/Source/Library/GeoGen.TheoremProver/TheoremProver.cs
+@@ -329,12 +329,15 @@ namespace GeoGen.TheoremProver
+ 
+                 // If all theorems are proven or there is no data even after object introduction, we're done
+                 if (!normalizationHelper.AnythingLeftToProve || data == null)
+-                    // If we should construct proofs
+-                    return shouldWeConstructProofs
+-                        // Build them for the theorems to be proven
+-                        ? (dynamic)proofBuilder.BuildProofs(theoremsToProve.AllObjects)
+-                        // Otherwise just take the theorems to be proven that happen to be proven
+-                        : theoremsToProve.AllObjects.Where(normalizationHelper.ProvedTheorems.Contains).ToReadOnlyHashSet();
++                {
++                    if (shouldWeConstructProofs)
++                        return proofBuilder.BuildProofs(theoremsToProve.AllObjects);
++                    // The applier may use [A,B] where the finder used an explicit
++                    // LineFromPoints(A,B). Match the same facts in both modes.
++                    var provedByNotation = normalizationHelper.ProvedTheorems.Select(TheoremNotation.Flatten).ToHashSet();
++                    return theoremsToProve.AllObjects.Where(theorem => provedByNotation.Contains(TheoremNotation.Flatten(theorem)))
++                        .ToReadOnlyHashSet();
++                }
+ 
+                 #region Inference rule applier call
+ 
+diff --git a/Source/Tests/UnitTests/GeoGen.TheoremProver.Tests/AdditionalCustomConstructionsTest.cs b/Source/Tests/UnitTests/GeoGen.TheoremProver.Tests/AdditionalCustomConstructionsTest.cs
+new file mode 100644
+index 0000000..792262e
+--- /dev/null
++++ b/Source/Tests/UnitTests/GeoGen.TheoremProver.Tests/AdditionalCustomConstructionsTest.cs
+@@ -0,0 +1,202 @@
++using FluentAssertions;
++using GeoGen.Constructor;
++using GeoGen.Core;
++using GeoGen.Infrastructure;
++using GeoGen.TheoremFinder;
++using GeoGen.TheoremProver.InferenceRuleProvider;
++using GeoGen.TheoremProver.ObjectIntroductionRuleProvider;
++using Ninject;
++using NUnit.Framework;
++using static GeoGen.Core.ConfigurationObjectType;
++using static GeoGen.Core.ComposedConstructions;
++using static GeoGen.Core.PredefinedConstructions;
++using static GeoGen.Core.TheoremType;
++
++namespace GeoGen.TheoremProver.Tests
++{
++    public class AdditionalCustomConstructionsTest
++    {
++        private IKernel kernel;
++        private readonly InvalidTracer tracer = new();
++        private static IReadOnlyList<LoadedInferenceRule> Rules => new InferenceRuleProvider.InferenceRuleProvider(
++            new InferenceRuleProviderSettings(Path.Combine(TestContext.CurrentContext.TestDirectory, "InferenceRules"), "txt"))
++            .GetInferenceRulesAsync().GetAwaiter().GetResult();
++
++        [OneTimeSetUp]
++        public async Task Setup()
++        {
++            kernel = NinjectUtilities.CreateKernel().AddConstructor().AddTheoremFinder(new TheoremFindingSettings(
++                Enum.GetValues<TheoremType>().Except(new[] { EqualObjects }).ToArray(),
++                new TangentCirclesTheoremFinderSettings(false), new LineTangentToCircleTheoremFinderSettings(false)));
++            var introductions = await new ObjectIntroductionRuleProvider.ObjectIntroductionRuleProvider(new ObjectIntroductionRuleProviderSettings(
++                Path.Combine(TestContext.CurrentContext.TestDirectory, "object_introduction_rules.txt"))).GetObjectIntroductionRulesAsync();
++            kernel.AddTheoremProver(new TheoremProvingSettings(new InferenceRuleManagerData(Rules), new ObjectIntroducerData(introductions),
++                new TheoremProverSettings(false, false)));
++            kernel.Rebind<IInvalidInferenceTracer>().ToConstant(tracer);
++        }
++        [OneTimeTearDown] public void Teardown() => kernel.Dispose();
++
++        public static IEnumerable<TestCaseData> GeometricRules() => Rules
++            .Where(rule => rule.RelativeFileName.Contains("AdditionalCustomConstructions") && rule.NeededAssumptionTypes.Count == 0)
++            .Select(rule => new TestCaseData(rule).SetName("Geometry_"+Path.GetFileNameWithoutExtension(rule.RelativeFileName)+"_"+rule.Number));
++
++        [TestCaseSource(nameof(GeometricRules))]
++        public void Every_Unconditional_New_Rule_Holds_In_Five_Independent_Pictures(LoadedInferenceRule rule)
++        {
++            var objects = rule.DeclaredObjects.Cast<ConfigurationObject>().ToArray();
++            var loose = objects.GetDefiningObjects().OfType<LooseConfigurationObject>().Distinct().ToArray();
++            var layout = loose.Length == 4 ? LooseObjectLayout.Quadrilateral : LooseObjectLayout.Triangle;
++            loose.Length.Should().BeOneOf(3,4);
++            var configuration = Configuration.DeriveFromObjects(layout, objects);
++            var (pictures, data) = kernel.Get<IGeometryConstructor>().ConstructWithUniformLayout(configuration, 5);
++            data.InconstructibleObject.Should().BeNull(rule.ToString());
++            (data.Duplicates == default).Should().BeTrue(rule.ToString());
++            kernel.Get<IGeometricTheoremVerifier>().IsTrueInAllPictures(pictures, rule.Conclusion).Should().BeTrue(rule.ToString());
++        }
++
++        public static IEnumerable<string> Scenarios => new[] { "contact", "contact-projection", "contact-lengths", "humpty", "dumpty", "ho", "tangents",
++            "bisector", "external-bisector", "symedian-end", "radius", "gergonne", "nagel", "lemoine", "quadrilateral-centroid", "poncelet",
++            "feuerbach", "fpc", "isogonal", "isotomic", "antigonal", "harmonic", "isogonal-centroid", "isogonal-circumcenter", "isotomic-gergonne" };
++
++        [TestCaseSource(nameof(Scenarios))]
++        public void Defining_Facts_Are_Proved_And_Wrong_Analogs_Are_Not_Inferrable(string name)
++        {
++            var A = new LooseConfigurationObject(Point); var B = new LooseConfigurationObject(Point); var C = new LooseConfigurationObject(Point);
++            var D = new LooseConfigurationObject(Point); var P = new LooseConfigurationObject(Point);
++            ConstructedConfigurationObject Make(Construction c, params ConfigurationObject[] args) => new(c,args);
++            Theorem Inc(ConfigurationObject x, ConfigurationObject c) => new(Incidence,x,c);
++            Theorem Col(ConfigurationObject a, ConfigurationObject b, ConfigurationObject c) => new(CollinearPoints,a,b,c);
++            Theorem Per(ConfigurationObject a, ConfigurationObject b, ConfigurationObject l) => new(PerpendicularLines,new TheoremObject[]{ new LineTheoremObject(a,b),new LineTheoremObject(l) });
++            Theorem Equal(ConfigurationObject a, ConfigurationObject b, ConfigurationObject c, ConfigurationObject d) => new(EqualLineSegments,
++                new TheoremObject[]{new LineSegmentTheoremObject(a,b),new LineSegmentTheoremObject(c,d)});
++            var objects = new List<ConstructedConfigurationObject>(); var targets = new List<Theorem>(); Theorem wrong = null;
++            var layout = LooseObjectLayout.Triangle;
++            switch (name)
++            {
++                case "contact": {
++                    var c=Make(Incircle,A,B,C);var x=Make(IncircleTangentPoint,A,B,C);objects.AddRange(new[]{c,x});targets.Add(Inc(x,c));
++                    wrong=Inc(x,Make(Circumcircle,A,B,C));break;
++                }
++                case "contact-projection": {
++                    var i=Make(Incenter,A,B,C);var x=Make(IncircleTangentPoint,A,B,C);var l=Make(LineFromPoints,B,C);
++                    objects.AddRange(new[]{i,l,x});targets.Add(Per(i,x,l));wrong=Col(A,i,x);break;
++                }
++                case "contact-lengths": {
++                    var x=Make(IncircleTangentPoint,A,B,C);var y=Make(IncircleTangentPoint,C,A,B);objects.AddRange(new[]{x,y});targets.Add(Equal(B,x,B,y));wrong=Equal(A,x,A,y);break;
++                }
++                case "humpty": case "dumpty": {
++                    var center=Make(name=="humpty"?Orthocenter:Circumcenter,A,B,C);var line=Make(name=="humpty"?Median:Symedian,A,B,C);
++                    var x=Make(name=="humpty"?HumptyPoint:DumptyPoint,A,B,C);objects.AddRange(new[]{center,line,x});targets.AddRange(new[]{Inc(x,line),Per(center,x,line)});
++                    wrong=Inc(x,Make(LineFromPoints,B,C));break;
++                }
++                case "ho": {
++                    var h=Make(PerpendicularProjectionOnLineFromPoints,A,B,C);var m=Make(Midpoint,B,C);var x=Make(HOPoint,A,B,C);
++                    objects.AddRange(new[]{h,m,x});targets.Add(Equal(m,h,m,x));wrong=Equal(B,h,B,x);break;
++                }
++                case "tangents": {
++                    var l=Make(TangentLine,B,A,C);var m=Make(TangentLine,C,A,B);var x=Make(TangentLinesIntersection,A,B,C);
++                    objects.AddRange(new[]{l,m,x});targets.AddRange(new[]{Inc(x,l),Inc(x,m)});wrong=Inc(x,Make(Circumcircle,A,B,C));break;
++                }
++                case "bisector": case "external-bisector": {
++                    var l=Make(name=="bisector"?InternalAngleBisector:ExternalAngleBisector,A,B,C);
++                    var x=Make(name=="bisector"?BisectorEnd:ExternalBisectorEnd,A,B,C);objects.AddRange(new[]{l,x});targets.Add(Inc(x,l));
++                    wrong=Inc(x,Make(InternalAngleBisector,B,A,C));break;
++                }
++                case "symedian-end": {
++                    var l=Make(Symedian,A,B,C);var t=Make(TangentLinesIntersection,A,B,C);var x=Make(SymedianEnd,A,B,C);
++                    objects.AddRange(new[]{l,t,x});targets.AddRange(new[]{Inc(x,l),Col(A,x,t)});wrong=Inc(x,Make(Median,A,B,C));break;
++                }
++                case "radius": {
++                    var o=Make(Circumcenter,A,B,C);var l=Make(RadiusLine,A,B,C);var x=Make(RadiusLineEnd,A,B,C);
++                    objects.AddRange(new[]{o,l,x});targets.AddRange(new[]{Inc(o,l),Inc(x,l),Col(A,o,x)});wrong=Inc(o,Make(LineFromPoints,B,C));break;
++                }
++                case "gergonne": {
++                    var t=Make(IncircleTangentPoint,A,B,C);var u=Make(IncircleTangentPoint,B,A,C);var x=Make(Gergonne,A,B,C);
++                    objects.AddRange(new[]{t,u,x});targets.AddRange(new[]{Col(A,t,x),Col(B,u,x)});wrong=Col(B,t,x);break;
++                }
++                case "nagel": {
++                    var e=Make(Excenter,A,B,C);var t=Make(PerpendicularProjectionOnLineFromPoints,e,B,C);var x=Make(Nagel,A,B,C);
++                    objects.AddRange(new[]{e,t,x});targets.Add(Col(A,t,x));wrong=Col(B,t,x);break;
++                }
++                case "lemoine": {
++                    var l=Make(Symedian,A,B,C);var t=Make(SymedianEnd,A,B,C);var x=Make(Lemoine,A,B,C);
++                    objects.AddRange(new[]{l,t,x});targets.AddRange(new[]{Inc(x,l),Col(A,t,x)});wrong=Inc(x,Make(Median,A,B,C));break;
++                }
++                case "quadrilateral-centroid": {
++                    layout=LooseObjectLayout.Quadrilateral;
++                    var m=Make(Midpoint,A,B);var n=Make(Midpoint,C,D);var t=Make(Centroid,A,B,C);var x=Make(QuadrilateralCentroid,A,B,C,D);
++                    objects.AddRange(new[]{m,n,t,x});targets.AddRange(new[]{Col(m,n,x),Equal(x,m,x,n),Col(D,t,x)});wrong=Col(A,B,x);break;
++                }
++                case "poncelet": {
++                    layout=LooseObjectLayout.Quadrilateral;
++                    var c=Make(NinePointCircle,A,B,C);var d=Make(NinePointCircle,A,B,D);var x=Make(PonceletPoint,A,B,C,D);
++                    objects.AddRange(new[]{c,d,x});targets.AddRange(new[]{Inc(x,c),Inc(x,d)});wrong=Inc(x,Make(Circumcircle,A,B,C));break;
++                }
++                case "feuerbach": {
++                    var c=Make(Incircle,A,B,C);var d=Make(NinePointCircle,A,B,C);var x=Make(FeuerbachPoint,A,B,C);
++                    objects.AddRange(new[]{c,d,x});targets.AddRange(new[]{Inc(x,c),Inc(x,d)});wrong=Inc(x,Make(Circumcircle,A,B,C));break;
++                }
++                case "fpc": {
++                    var h=Make(Orthocenter,A,B,C);var m=Make(Midpoint,B,C);var d=Make(PerpendicularProjectionOnLineFromPoints,A,B,C);
++                    var u=Make(HumptyPoint,A,B,C);var c=Make(FPC,A,B,C);objects.AddRange(new[]{h,m,d,u,c});
++                    targets.AddRange(new[]{Inc(h,c),Inc(m,c),Inc(d,c),Inc(u,c)});wrong=Inc(A,c);break;
++                }
++                case "isogonal-centroid": {
++                    var g=Make(Centroid,A,B,C);var l=Make(Symedian,A,B,C);var x=Make(Isogonal,g,A,B,C);
++                    objects.AddRange(new[]{g,l,x});targets.Add(Inc(x,l));wrong=Inc(x,Make(Median,A,B,C));break;
++                }
++                case "isogonal-circumcenter": {
++                    var o=Make(Circumcenter,A,B,C);var l=Make(LineFromPoints,B,C);var x=Make(Isogonal,o,A,B,C);
++                    objects.AddRange(new[]{o,l,x});targets.Add(Per(A,x,l));wrong=Col(B,C,x);break;
++                }
++                case "isotomic-gergonne": {
++                    var g=Make(Gergonne,A,B,C);var e=Make(Excenter,A,B,C);var t=Make(PerpendicularProjectionOnLineFromPoints,e,B,C);var x=Make(Isotomic,g,A,B,C);
++                    objects.AddRange(new[]{g,e,t,x});targets.Add(Col(A,t,x));wrong=Col(B,t,x);break;
++                }
++                case "isogonal": {
++                    layout=LooseObjectLayout.Quadrilateral;
++                    var l=Make(InternalAngleBisector,A,B,C);var r=Make(ReflectionInLine,l,P);var x=Make(Isogonal,P,A,B,C);
++                    objects.AddRange(new[]{l,r,x});targets.Add(Col(A,r,x));wrong=Col(A,P,x);break;
++                }
++                case "isotomic": {
++                    layout=LooseObjectLayout.Quadrilateral;
++                    var x=Make(Isotomic,P,A,B,C);var t=Make(IntersectionOfLinesFromPoints,A,P,B,C);var u=Make(IntersectionOfLinesFromPoints,A,x,B,C);var m=Make(Midpoint,B,C);
++                    objects.AddRange(new[]{x,t,u,m});targets.Add(Equal(m,t,m,u));wrong=Equal(B,t,B,u);break;
++                }
++                case "antigonal": {
++                    layout=LooseObjectLayout.Quadrilateral;
++                    var r=Make(ReflectionInLineFromPoints,P,B,C);var x=Make(Antigonal,P,A,B,C);objects.AddRange(new[]{r,x});
++                    targets.Add(new Theorem(ConcyclicPoints,x,B,C,r));wrong=new Theorem(ConcyclicPoints,x,A,C,r);break;
++                }
++                case "harmonic": {
++                    var c=Make(CircleWithDiameter,B,C);var i=Make(InversionOfPoint,A,c);var l=Make(LineFromPoints,B,C);var x=Make(Harmonic,A,B,C);
++                    objects.AddRange(new[]{c,i,l,x});targets.Add(Per(i,x,l));wrong=Col(B,C,x);break;
++                }
++
++            }
++            var configuration=Configuration.DeriveFromObjects(layout,objects.Cast<ConfigurationObject>().ToArray());
++            var (pictures,data)=kernel.Get<IGeometryConstructor>().ConstructWithUniformLayout(configuration,3);
++            data.InconstructibleObject.Should().BeNull(name);(data.Duplicates==default).Should().BeTrue(name);
++            var picture=new ContextualPicture(pictures);var facts=kernel.Get<ITheoremFinder>().FindAllTheorems(picture);
++            facts.AllObjects.Should().Contain(targets,name);
++            kernel.Get<IGeometricTheoremVerifier>().IsTrueInAllPictures(pictures.Clone(),wrong).Should().BeFalse("wrong analogous claim for "+name);
++            tracer.Errors.Clear();
++            var proofs=kernel.Get<ITheoremProver>().ProveTheoremsAndConstructProofs(new TheoremMap(),facts,picture);
++            proofs.Keys.Should().Contain(targets,name);
++            proofs.Keys.Should().NotContain(wrong);
++            var withoutProofs=kernel.Get<ITheoremProver>().ProveTheorems(new TheoremMap(),facts,picture);
++            withoutProofs.Should().Contain(targets,name+" without proof construction");
++            tracer.Errors.Should().BeEmpty("new rules must not propose false facts for "+name);
++        }
++
++        private class InvalidTracer : IInvalidInferenceTracer
++        {
++            public List<string> Errors {get;}=new();
++            public void MarkInvalidInferrence(Configuration c,Theorem theorem,InferenceRule rule,Theorem[] negatives,Theorem[] positives)
++            {
++                if(rule is LoadedInferenceRule loaded && loaded.RelativeFileName.Contains("AdditionalCustomConstructions"))
++                    Errors.Add(rule.ToString());
++            }
++        }
++    }
++}
+diff --git a/Source/Tests/UnitTests/GeoGen.TheoremProver.Tests/DefiningObjectsProofTest.cs b/Source/Tests/UnitTests/GeoGen.TheoremProver.Tests/DefiningObjectsProofTest.cs
+new file mode 100644
+index 0000000..dc37488
+--- /dev/null
++++ b/Source/Tests/UnitTests/GeoGen.TheoremProver.Tests/DefiningObjectsProofTest.cs
+@@ -0,0 +1,59 @@
++using FluentAssertions;
++using GeoGen.Core;
++using NUnit.Framework;
++using static GeoGen.Core.ConfigurationObjectType;
++using static GeoGen.Core.PredefinedConstructions;
++using static GeoGen.Core.TheoremType;
++
++namespace GeoGen.TheoremProver.Tests
++{
++    public class DefiningObjectsProofTest
++    {
++        [Test]
++        public void Implicit_Defining_Incidence_Has_A_Proof_But_An_Arbitrary_Incidence_Does_Not()
++        {
++            var A=new LooseConfigurationObject(Point);var B=new LooseConfigurationObject(Point);var C=new LooseConfigurationObject(Point);
++            var l=new LineTheoremObject(A,B);
++            var definition=new Theorem(Incidence,new TheoremObject[]{new PointTheoremObject(A),l});
++            var result=new Theorem(Incidence,A,new ConstructedConfigurationObject(LineFromPoints,A,B));
++            var builder=new TheoremProofBuilder();
++            builder.AddImplication(InferenceRuleType.CustomRule,result,new[]{definition});
++            builder.BuildProofs(new[]{definition}).Should().ContainKey(definition);
++            var unrelated=new Theorem(Incidence,new TheoremObject[]{new PointTheoremObject(C),l});
++            var other=new TheoremProofBuilder();
++            Action invalid=()=>other.AddImplication(InferenceRuleType.CustomRule,result,new[]{unrelated});
++            invalid.Should().Throw<TheoremProverException>();
++        }
++
++        [TestCase(false)]
++        [TestCase(true)]
++        public void Explicit_And_Implicit_Shape_Notations_Reuse_Actual_Proofs(bool circle)
++        {
++            var A=new LooseConfigurationObject(Point);var B=new LooseConfigurationObject(Point);var C=new LooseConfigurationObject(Point);
++            var D=new LooseConfigurationObject(Point);var E=new LooseConfigurationObject(Point);
++            Theorem known;Theorem alternate;
++            if(circle)
++            {
++                var c=new ConstructedConfigurationObject(Circumcircle,A,B,C);
++                known=new Theorem(Incidence,D,c);
++                alternate=new Theorem(Incidence,new TheoremObject[]{new PointTheoremObject(D),new CircleTheoremObject(A,B,C)});
++            }
++            else
++            {
++                var l=new ConstructedConfigurationObject(LineFromPoints,A,B);
++                known=new Theorem(PerpendicularLines,new TheoremObject[]{new LineTheoremObject(l),new LineTheoremObject(C,D)});
++                alternate=new Theorem(PerpendicularLines,new TheoremObject[]{new LineTheoremObject(A,B),new LineTheoremObject(C,D)});
++            }
++            var result=alternate;
++            var builder=new TheoremProofBuilder();
++            builder.AddImplication(InferenceRuleType.AssumedProven,known,Array.Empty<Theorem>());
++            builder.AddImplication(InferenceRuleType.CustomRule,result,new[]{alternate});
++            var proof=builder.BuildProofs(new[]{result});
++            proof.Should().ContainKey(result);
++            // A notation change cannot establish the geometric fact from nothing.
++            var empty=new TheoremProofBuilder();
++            Action invalid=()=>empty.AddImplication(InferenceRuleType.CustomRule,result,new[]{alternate});
++            invalid.Should().Throw<TheoremProverException>();
++        }
++    }
++}

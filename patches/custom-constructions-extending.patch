@@ -1,0 +1,194 @@
+diff --git a/GeometryExtending.cabal b/GeometryExtending.cabal
+index 9203f2c..3669c48 100644
+--- a/GeometryExtending.cabal
++++ b/GeometryExtending.cabal
+@@ -54,6 +54,7 @@ common warnings
+ executable GeometryExtending
+     -- Import common warning flags.
+     import:           warnings
++    ghc-options: -threaded -rtsopts
+ 
+     -- .hs or .lhs file containing the Main module.
+     main-is:          Main.hs
+@@ -72,3 +73,12 @@ executable GeometryExtending
+ 
+     -- Base language which the package is written in.
+     default-language: GHC2021
++
++
++test-suite regression
++    type: exitcode-stdio-1.0
++    main-is: Regression.hs
++    hs-source-dirs: test, app
++    other-modules: Extending, Functions, RandomGen, Types
++    build-depends: base ^>=4.18.0.0, random, mtl, containers, complex-generic, constructible
++    default-language: GHC2021
+diff --git a/app/Functions.hs b/app/Functions.hs
+index 6a1600e..95f82f4 100644
+--- a/app/Functions.hs
++++ b/app/Functions.hs
+@@ -152,7 +152,7 @@ symedian :: Point -> Point -> Point -> Line
+ symedian a b c =
+     let m = (a + c) / 2
+         m' = inversion m (circumcircle a b c)
+-     in line a m'
++     in line b m'
+ 
+ excenter :: Point -> Point -> Point -> Point
+ excenter a b c =
+@@ -184,6 +184,28 @@ divide alpha begin end = begin * (1 .- alpha) + end * alpha
+ functions :: Map.Map String ([Shape] -> [Rand Shape])
+ functions = Map.fromList 
+     [   (
++        "CenterOfCircle", mkBuilder $ \c -> [rndPoint, return $ center c] :: [Rand Point]
++    ), (
++        "Harmonic", mkBuilder $ \a b c ->
++        [ rndPoint
++        , return $ symmetry (inversion a (circle ((b+c)/2) b)) (line b c)
++        ]
++    ), (
++        "InversionOfPoint", mkBuilder $ \a c ->
++        [ rndPointOnLine $ line a (center c)
++        , return $ inversion a c
++        ]
++    ), (
++        "CenterOfNegativeHomothety", mkBuilder $ \c d ->
++        [ rndPointOnLine $ line (center c) (center d)
++        , return $ (center c *. sqrt (radiusSqr d) + center d *. sqrt (radiusSqr c)) /. (sqrt (radiusSqr c) + sqrt (radiusSqr d))
++        ]
++    ), (
++        "CenterOfPositiveHomothety", mkBuilder $ \c d ->
++        [ rndPointOnLine $ line (center c) (center d)
++        , return $ (center c *. sqrt (radiusSqr d) - center d *. sqrt (radiusSqr c)) /. (sqrt (radiusSqr d) - sqrt (radiusSqr c))
++        ]
++    ), (
+         "Gergonne", mkBuilder $ \a b c ->
+         [ rndPoint
+         , return $ 
+@@ -306,26 +328,26 @@ functions = Map.fromList
+     ),  (
+         "MedianMiddle", mkBuilder $ \a b c ->
+         [ rndPointOnLine $ line a $ (b + c) / 2
+-        , rndPointOnLine $ line b c
++        , rndPointOnLine $ line ((a + b) / 2) ((a + c) / 2)
+         , return $ (a + (b + c) / 2) / 2
+         ] 
+     ),  (
+         "HeightMiddle", mkBuilder $ \a b c ->
+         [ rndPointOnLine $ perpendicular a (line b c)
+-        , rndPointOnLine $ line b c
+-        , return $ intersect (perpendicular a (line b c)) (line b c)
++        , rndPointOnLine $ line ((a + b) / 2) ((a + c) / 2)
++        , return $ (a + project a (line b c)) / 2
+         ]
+     ),  (
+         "BisectorEnd", mkBuilder $ \a b c ->
+-        [ rndPointOnLine $ bisector a b c
++        [ rndPointOnLine $ bisector b a c
+         , rndPointOnLine $ line b c
+-        , return $ intersect (bisector a b c) (line b c)
++        , return $ intersect (bisector b a c) (line b c)
+         ]
+     ),  (
+         "BisectorMiddle", mkBuilder $ \a b c ->
+-        [ rndPointOnLine $ bisector a b c
++        [ rndPointOnLine $ bisector b a c
+         , rndPointOnLine $ line ((a + b) / 2) ((a + c) / 2) 
+-        , return $ (a + intersect (bisector a b c) (line a b)) / 2 :: Rand Point
++        , return $ (a + intersect (bisector b a c) (line b c)) / 2 :: Rand Point
+         ]
+     ),  (
+         "Centroid", mkBuilder $ \a b c -> 
+@@ -338,7 +360,7 @@ functions = Map.fromList
+         "CircleWithCenterThroughPoint",
+         mkBuilder $ \a b ->
+         [ circle a <$> rndPoint
+-        , (`circle` a) <$> rndPoint
++        , (`circle` b) <$> rndPoint
+         , return $ circle a b
+         ]
+     ),  (
+@@ -612,9 +634,16 @@ checkEqPts :: Point -> Point -> Bool
+ checkEqPts a b = a == b
+ 
+ 
++checkIncidence :: [Shape] -> Bool
++checkIncidence [PointShape p, LineShape l] = 2 * re (conj (coef l) * p) + free l == 0
++checkIncidence [LineShape l, PointShape p] = checkIncidence [PointShape p, LineShape l]
++checkIncidence [PointShape p, CircleShape c] = norm (p - center c) == radiusSqr c
++checkIncidence [CircleShape c, PointShape p] = checkIncidence [PointShape p, CircleShape c]
++checkIncidence _ = error "Incidence expects a point and a line or circle"
++
+ factCheckers :: Map.Map String ([Shape] -> Bool)
+ factCheckers = Map.fromList
+-    [  (
++    [ ("Incidence", checkIncidence), (
+         "CollinearPoints", mkChecker $ \a b c -> checkReal $ (b - a) * conj (c - a)
+     ), (
+         "ConcyclicPoints", mkChecker $ \a b c d -> checkReal $ (a - b) * (d - c) * conj (b - c) * conj (a - d)
+diff --git a/test/Regression.hs b/test/Regression.hs
+new file mode 100644
+index 0000000..8c0e241
+--- /dev/null
++++ b/test/Regression.hs
+@@ -0,0 +1,60 @@
++module Main where
++
++import Functions
++import Extending
++import Types
++import RandomGen
++import qualified Data.Map as Map
++import Data.Complex.Generic (Complex((:+)))
++import Control.Monad (unless, forM_)
++import Control.Monad.State (evalState)
++import System.Random (mkStdGen)
++
++fixed :: Rand a -> a
++fixed (Rand action) = evalState action (mkStdGen 20261112)
++
++assert :: String -> Bool -> IO ()
++assert label value = unless value (error label)
++
++point :: Shape -> Point
++point (PointShape p) = p
++point _ = error "Expected point"
++
++main :: IO ()
++main = do
++    let a = 5 :+ 12; b = 0 :+ 0; c = 14 :+ 0
++        args = map PointShape [a,b,c]
++        mid = line ((a+b)/2) ((a+c)/2)
++        cases = [("HeightMiddle",5 :+ 6), ("MedianMiddle",6 :+ 6),
++                 ("BisectorMiddle",(23/4) :+ 6), ("ExternalBisectorMiddle",(-43) :+ 6),
++                 ("SymedianMiddle",(1084/197) :+ 6), ("RadiusLineMiddle",(137/21) :+ 6)]
++    forM_ cases $ \(name,expected) -> do
++        let results = map (point . fixed) ((functions Map.! name) args)
++        assert (name ++ " exact position") (last results == expected)
++        assert (name ++ " weakened midline") (checkIncidence [PointShape (results !! 1),LineShape mid])
++        assert (name ++ " weakened defining line") (checkIncidence [PointShape (head results),LineShape (line a expected)])
++        let commands = [constPointCmd "A" a,constPointCmd "B" b,constPointCmd "C" c,
++                        Command "l" [] (const [pure (LineShape mid)]),
++                        Command "X" ["A","B","C"] (functions Map.! name)]
++        assert (name ++ " incidental fact is filtered")
++               (not (fixed (check10 commands (Conclusion ["X","l"] checkIncidence))))
++    let end = point . fixed . last $ (functions Map.! "BisectorEnd") args
++    assert "BisectorEnd is at the A-angle" (end == (13/2 :+ 0))
++    let l = line 0 2; circle2 = circle 0 2
++    assert "line incidence both orders" (checkIncidence [PointShape 1,LineShape l] && checkIncidence [LineShape l,PointShape 1])
++    assert "off-line incidence" (not (checkIncidence [PointShape (0 :+ 1),LineShape l]))
++    assert "circle incidence both orders" (checkIncidence [PointShape 2,CircleShape circle2] && checkIncidence [CircleShape circle2,PointShape 2])
++    assert "off-circle incidence" (not (checkIncidence [PointShape 1,CircleShape circle2]))
++    let get name xs = point . fixed . last $ (functions Map.! name) xs
++    assert "center" (get "CenterOfCircle" [CircleShape circle2] == 0)
++    assert "harmonic" (get "Harmonic" (map PointShape [4,0,2]) == 4/3)
++    assert "inversion" (get "InversionOfPoint" [PointShape 4,CircleShape circle2] == 1)
++    let other = circle 10 11
++    assert "negative homothety" (get "CenterOfNegativeHomothety" [CircleShape circle2,CircleShape other] == 20/3)
++    assert "positive homothety" (get "CenterOfPositiveHomothety" [CircleShape circle2,CircleShape other] == 20)
++    let circleFact = [constPointCmd "A" 0,constPointCmd "B" 2,
++                      Command "c" ["A","B"] (functions Map.! "CircleWithCenterThroughPoint")]
++    assert "defining circle incidence is filtered" (not (fixed (check10 circleFact (Conclusion ["B","c"] checkIncidence))))
++    let essential = [constPointCmd "A" 0,constPointCmd "B" 10,Command "M" ["A","B"] (functions Map.! "Midpoint")]
++    assert "essential midpoint equality survives" (fixed (check10 essential (Conclusion ["A","M","M","B"] (factCheckers Map.! "EqualLineSegments"))))
++    putStrLn "EXTENDING REGRESSION OK: six middles, angle vertex, incidence, primitives, essential theorem"

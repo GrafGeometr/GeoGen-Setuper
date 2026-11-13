@@ -254,6 +254,10 @@ class Builder:
             raise BuildError('Патч HiddenPoints не создал контрольный пример; сборка остановлена.')
         self.apply_source_patch(self.work / 'GeoGen', HERE / 'patches/streaming-geogen.patch')
         self.apply_source_patch(self.work / 'GeometryExtending', HERE / 'patches/streaming-extending.patch')
+        self.apply_source_patch(self.work / 'GeoGen', HERE / 'patches/custom-constructions-geogen.patch')
+        self.apply_source_patch(self.work / 'GeoGen', HERE / 'patches/custom-construction-rules.patch')
+        self.apply_source_patch(self.work / 'GeometryExtending', HERE / 'patches/custom-constructions-extending.patch')
+        self.apply_source_patch(self.work / 'Geometry', HERE / 'patches/custom-constructions-geometry.patch')
         if self.stage.exists():
             shutil.rmtree(self.stage)
         self.stage.mkdir()
@@ -295,9 +299,8 @@ class Builder:
         shutil.copytree(runtimes[-1], destination / 'shared/Microsoft.NETCore.App' / runtimes[-1].name)
 
         extending = self.work / 'GeometryExtending'
-        # Enable multicore RTS without changing the mathematics or hard-coding core count.
-        cabal_file = extending / 'GeometryExtending.cabal'
-        write(cabal_file, cabal_file.read_text() + '\n    ghc-options: -threaded -rtsopts\n')
+        # The construction patch enables threaded RTS in the executable stanza;
+        # appending fields to the file would now configure the test suite instead.
         cabal_config = Path(self.env['CABAL_DIR']) / 'config'
         if not cabal_config.exists():
             self.run([self.cabal, 'user-config', 'init'], name='cabal-config')
@@ -310,6 +313,11 @@ class Builder:
         if self.args.offline:
             cmd += ['--offline']
         self.run(cmd, cwd=extending, name='extending-build')
+        if self.args.test:
+            test_cmd = [self.cabal, 'test', 'regression', f'--with-compiler={self.ghc}', f'-j{self.args.jobs}']
+            if self.args.offline:
+                test_cmd += ['--offline']
+            self.run(test_cmd, cwd=extending, name='extending-tests')
         executable = self.run([self.cabal, 'list-bin', 'exe:GeometryExtending',
                                f'--with-compiler={self.ghc}'], cwd=extending,
                               name='extending-path', capture=True).strip().splitlines()[-1]
@@ -359,11 +367,15 @@ class Builder:
             'dotnet_sdk': DOTNET_VERSION, 'ghc': GHC_VERSION,
             'gradle': GRADLE_VERSION, 'jdk': '17',
             'patches': ['Atomic theorem stream, structured Extending checks, live Geometry results',
+                        'Defining rules for further custom constructions and consistent proof notation',
+                        'Custom-construction identities, primitive support, middle-point inference rules',
+                        'Consistent Extending definitions and incidence checks; converter coverage',
                         'HiddenPoints input, generation restriction and symmetry-safe deduplication',
                         'XDG data path and second CLI argument in desktop Main.kt',
                         'desktop common source directory', 'JVM target for original converter',
                         'threaded RTS for Extending']}, indent=2))
         shutil.copy2(HERE / 'README.md', self.stage / 'BUILDER-README.md')
+        shutil.copy2(HERE / 'CONSTRUCTION_RULES.md', self.stage / 'CONSTRUCTION_RULES.md')
         # A broken build must never replace the last working installation.
         self.run([sys.executable, self.stage / 'runtime.py', 'smoke', '--output', self.work / ('smoke-' + uuid.uuid4().hex[:8])], name='smoke')
         dest = self.args.output.resolve()

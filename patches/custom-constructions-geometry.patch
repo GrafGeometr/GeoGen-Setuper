@@ -1,0 +1,60 @@
+diff --git a/GeoGenIntegration/src/nativeMain/kotlin/Main.kt b/GeoGenIntegration/src/nativeMain/kotlin/Main.kt
+index b68b698..d62559f 100644
+--- a/GeoGenIntegration/src/nativeMain/kotlin/Main.kt
++++ b/GeoGenIntegration/src/nativeMain/kotlin/Main.kt
+@@ -123,6 +123,8 @@ fun GeoGenContext.parseGeoGenLine(line: String) {
+     comment(line)
+     when (val funName = line.substring(index + 1, open).trim()) {
+         "Centroid" -> "$name = centroid(${triangle(args[0], args[1], args[2])})"
++        "CenterOfCircle" -> "$name = center(${args[0]})"
++        "Harmonic" -> "$name = symmetry(inversion(${args[0]}, diameter_circle(${args[1]}, ${args[2]})), ${line(args[1], args[2])})"
+         "CircleWithCenterThroughPoint" -> "$name = circle(${args.joinToString()})"
+         "CircleWithDiameter" -> "$name = diameter_circle(${args.joinToString()})"
+         "Circumcenter" -> "$name = center(${circumcircle(args.joinToString())})"
+@@ -169,6 +171,18 @@ fun GeoGenContext.parseGeoGenLine(line: String) {
+         "DumptyPoint" -> "$name = dumpty(${args[1]}, ${args[0]}, ${args[2]})"
+         "Isogonal" -> "$name = isogonal(${args.joinToString()})"
+         "Isotomic" -> "$name = isotomic(${args.joinToString()})"
++        "Antigonal" -> {
++            val pa = point("symmetry(${args[0]}, ${line(args[2], args[3])})")
++            val pb = point("symmetry(${args[0]}, ${line(args[1], args[3])})")
++            "$name = ccintersect(${args[3]}, circumcircle(${args[3]}, ${args[1]}, $pb), circumcircle(${args[3]}, ${args[2]}, $pa))"
++        }
++        "InversionOfPoint" -> "$name = inversion(${args.joinToString()})"
++        "CenterOfNegativeHomothety", "CenterOfPositiveHomothety" -> {
++            val c = args[0]
++            val d = args[1]
++            val sign = if (funName == "CenterOfNegativeHomothety") "+" else "-"
++            "$name = (center($c) * radius($d) $sign center($d) * radius($c)) / (radius($d) $sign radius($c))"
++        }
+         "Centroid4" -> "$name = centroid(${args.joinToString()})"
+ 
+         "Lemoine" -> "$name = lemoine(${args.joinToString()})"
+@@ -184,14 +198,14 @@ fun GeoGenContext.parseGeoGenLine(line: String) {
+ 
+         "SymedianEnd" -> "$name = intersect(symedian(${args[1]}, ${args[0]}, ${args[2]}), ${args[1]}, ${args[2]})"
+         "RadiusLineEnd" -> "$name = intersect(${args[0]}, circumcenter(${args[1]}, ${args[0]}, ${args[2]}), ${args[1]}, ${args[2]})"
+-        "ExternalAngleBisectorEnd" -> "$name = intersect(exbisector(${args[1]}, ${args[0]}, ${args[2]}), ${args[1]}, ${args[2]})"
++        "ExternalAngleBisectorEnd", "ExternalBisectorEnd" -> "$name = intersect(exbisector(${args[1]}, ${args[0]}, ${args[2]}), ${args[1]}, ${args[2]})"
+         "BisectorEnd" -> "$name = intersect(bisector(${args[1]}, ${args[0]}, ${args[2]}), ${args[1]}, ${args[2]})"
+ 
+         "HeightMiddle" -> "$name = midpoint(${args[0]}, project(${args[0]}, ${args[1]}, ${args[2]}))"
+         "MedianMiddle" -> "$name = midpoint(${args[0]}, midpoint(${args[1]}, ${args[2]}))"
+         "SymedianMiddle" -> "$name = midpoint(${args[0]}, intersect(symedian(${args[1]}, ${args[0]}, ${args[2]}), ${args[1]}, ${args[2]}))"
+         "RadiusLineMiddle" -> "$name = midpoint(${args[0]}, intersect(${args[0]}, circumcenter(${args[1]}, ${args[0]}, ${args[2]}), ${args[1]}, ${args[2]}))"
+-        "ExternalAngleBisectorMiddle" -> "$name = midpoint(${args[0]}, intersect(exbisector(${args[1]}, ${args[0]}, ${args[2]}), ${args[1]}, ${args[2]}))"
++        "ExternalAngleBisectorMiddle", "ExternalBisectorMiddle" -> "$name = midpoint(${args[0]}, intersect(exbisector(${args[1]}, ${args[0]}, ${args[2]}), ${args[1]}, ${args[2]}))"
+         "BisectorMiddle" -> "$name = midpoint(${args[0]}, intersect(bisector(${args[1]}, ${args[0]}, ${args[2]}), ${args[1]}, ${args[2]}))"
+ 
+         "ParallelLine" -> "$name = parallel(${args.joinToString()})"
+@@ -281,6 +295,10 @@ fun GeoGenContext.parseGeoGenGoal(line: String) {
+             check(args.size == 2) { "Expected 2 circles" }
+             "[red] ccintersect1(${args[0]}, ${args[1]})"
+         }
++        "Incidence" -> {
++            check(args.size == 2) { "Expected a point and a line or circle" }
++            ""
++        }
+         "ParallelLines" -> {
+             check(args.size == 2) { "Expected 2 lines" }
+             ""
