@@ -1,0 +1,15 @@
+diff --git a/GeoGenIntegration/src/nativeMain/kotlin/Main.kt b/GeoGenIntegration/src/nativeMain/kotlin/Main.kt
+index d62559f..d3b04c6 100644
+--- a/GeoGenIntegration/src/nativeMain/kotlin/Main.kt
++++ b/GeoGenIntegration/src/nativeMain/kotlin/Main.kt
+@@ -183,7 +183,9 @@ fun GeoGenContext.parseGeoGenLine(line: String) {
+             val sign = if (funName == "CenterOfNegativeHomothety") "+" else "-"
+             "$name = (center($c) * radius($d) $sign center($d) * radius($c)) / (radius($d) $sign radius($c))"
+         }
+-        "Centroid4" -> "$name = centroid(${args.joinToString()})"
++        "Centroid4", "QuadrilateralCentroid" -> "$name = (${args.joinToString(" + ")}) / 4"
++        "HOPoint" -> "$name = ${args[1]} + ${args[2]} - project(${args[0]}, ${args[1]}, ${args[2]})"
++        "FPC" -> "$name = diameter_circle(orthocenter(${triangle(args[0], args[1], args[2])}), midpoint(${args[1]}, ${args[2]}))"
+ 
+         "Lemoine" -> "$name = lemoine(${args.joinToString()})"
+         "Nagel" -> "$name = nagel(${args.joinToString()})"

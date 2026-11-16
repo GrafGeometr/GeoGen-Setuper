@@ -37,6 +37,32 @@ class BuildError(RuntimeError):
     pass
 
 
+def check_construction_coverage(work: Path):
+    """Every advertised GeoGen construction must have both downstream handlers."""
+    core = work / 'GeoGen/Source/Library/GeoGen.Core/Constructions'
+    required = set()
+    for name in ('PredefinedConstructions.cs', 'ComposedConstructions.cs'):
+        required.update(re.findall(r'public\s+static\s+(?:Predefined|Composed)Construction\s+(\w+)\s*\{',
+                                   (core / name).read_text(encoding='utf-8-sig')))
+    if not required:
+        raise BuildError('Не удалось прочитать список построений GeoGen.')
+    extending_source = (work / 'GeometryExtending/app/Functions.hs').read_text()
+    extending = set(re.findall(r'"([A-Za-z]\w*)"\s*,\s*mkBuilder', extending_source))
+    converter_source = (work / 'Geometry/GeoGenIntegration/src/nativeMain/kotlin/Main.kt').read_text()
+    block = re.search(r'when \(val funName\b.*?\{(.*?)else -> error\("Unexpected \$funName"\)',
+                      converter_source, re.S)
+    if not block:
+        raise BuildError('Не удалось прочитать список построений конвертера.')
+    converter = set(re.findall(r'"([A-Za-z]\w*)"\s*(?=,|->)', block.group(1)))
+    missing = []
+    for label, supported in (('Extending', extending), ('конвертер Geometry', converter)):
+        if required - supported:
+            missing.append(label + ': ' + ', '.join(sorted(required - supported)))
+    if missing:
+        raise BuildError('Нет сквозной поддержки построений. ' + '; '.join(missing))
+    return {'required': sorted(required), 'extending': sorted(extending), 'converter': sorted(converter)}
+
+
 def write(path: Path, content: str, executable: bool = False):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding='utf-8')
@@ -258,9 +284,13 @@ class Builder:
         self.apply_source_patch(self.work / 'GeoGen', HERE / 'patches/custom-construction-rules.patch')
         self.apply_source_patch(self.work / 'GeometryExtending', HERE / 'patches/custom-constructions-extending.patch')
         self.apply_source_patch(self.work / 'Geometry', HERE / 'patches/custom-constructions-geometry.patch')
+        self.apply_source_patch(self.work / 'GeometryExtending', HERE / 'patches/extending-construction-coverage.patch')
+        self.apply_source_patch(self.work / 'Geometry', HERE / 'patches/geometry-construction-coverage.patch')
+        coverage = check_construction_coverage(self.work)
         if self.stage.exists():
             shutil.rmtree(self.stage)
         self.stage.mkdir()
+        write(self.stage / 'data/construction-coverage.json', json.dumps(coverage, indent=2))
         geogen = self.work / 'GeoGen/Source'
         project = geogen / 'Launchers/GeoGen.MainLauncher/GeoGen.MainLauncher.csproj'
         # global.json prevents an unrelated installed SDK from changing the build.
@@ -367,6 +397,7 @@ class Builder:
             'dotnet_sdk': DOTNET_VERSION, 'ghc': GHC_VERSION,
             'gradle': GRADLE_VERSION, 'jdk': '17',
             'patches': ['Atomic theorem stream, structured Extending checks, live Geometry results',
+                        'Complete downstream construction coverage and named parser errors',
                         'Defining rules for further custom constructions and consistent proof notation',
                         'Custom-construction identities, primitive support, middle-point inference rules',
                         'Consistent Extending definitions and incidence checks; converter coverage',

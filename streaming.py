@@ -261,7 +261,12 @@ def consume(job, metadata, *, producer=None, workers=2, extending=True, check_ms
                     except Exception as error:
                         result = {'state': 'error', 'message': str(error)}
                     queue.finish(identifier, result, producer is not None and producer.poll() is None)
-                    print(f'{identifier}: {result["state"]}', flush=True)
+                    detail = safe_text(result.get('message', ''))
+                    if result['state'] in ('error', 'timeout') and detail:
+                        print(f'{identifier}: {result["state"]}: {detail[:240]} '
+                              f'(лог: {job / "tasks" / identifier / "worker.log"})', flush=True)
+                    else:
+                        print(f'{identifier}: {result["state"]}', flush=True)
                     del pending[future]
                     changed = True
             while len(pending) < workers:

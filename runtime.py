@@ -168,6 +168,18 @@ EqualLineSegments: A, D, D, B - total ranking 1
                               text=True, capture_output=True, timeout=7, check=True)
     if json.loads(response.stdout).get('status') != 'rejected':
         raise RuntimeError('HeightMiddle/Midline must be rejected as a defining construction fact.')
+    # Exercise initial contact points through the downstream checker: unlike a
+    # generated triviality, these definitions cannot disappear in GeoGen's prover.
+    contact_fixture = output / 'initial-contacts.txt'
+    contact_fixture.write_text(fixture.read_text().replace('D = Midpoint(A, B)',
+        'D = IncircleTangentPoint(A, B, C)\nE = IncircleTangentPoint(B, A, C)\nF = IncircleTangentPoint(C, A, B)').replace(
+        'EqualLineSegments: A, D, D, B', 'CollinearPoints: B, C, D'))
+    contact_files = convert(contact_fixture, output / 'initial-contacts-converter')
+    response = subprocess.run([str(EXTENDING), '--check-file', str(contact_files[0]), '2000'],
+                              text=True, capture_output=True, timeout=7, check=True)
+    status = json.loads(response.stdout)
+    if status.get('status') != 'rejected':
+        raise RuntimeError('Проверка исходных точек касания завершилась неправильно: ' + str(status))
     run_pipeline(ROOT / 'examples/input_projections.txt', output / 'job', extending=False, timeout=120)
     if not list((output / 'job/geo').glob('*.geo')):
         raise RuntimeError('Пример GeoGen не дал ни одной задачи для конвертации.')

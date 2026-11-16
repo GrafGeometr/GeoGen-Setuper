@@ -1,0 +1,174 @@
+diff --git a/GeometryExtending.cabal b/GeometryExtending.cabal
+index 3669c48..52959a1 100644
+--- a/GeometryExtending.cabal
++++ b/GeometryExtending.cabal
+@@ -79,6 +79,6 @@ test-suite regression
+     type: exitcode-stdio-1.0
+     main-is: Regression.hs
+     hs-source-dirs: test, app
+-    other-modules: Extending, Functions, RandomGen, Types
+-    build-depends: base ^>=4.18.0.0, random, mtl, containers, complex-generic, constructible
++    other-modules: Extending, Functions, RandomGen, Parser, Types
++    build-depends: base ^>=4.18.0.0, random, mtl, containers, parsec, complex-generic, constructible
+     default-language: GHC2021
+diff --git a/app/Functions.hs b/app/Functions.hs
+index 95f82f4..18f66c2 100644
+--- a/app/Functions.hs
++++ b/app/Functions.hs
+@@ -181,9 +181,69 @@ inversion p c =
+ divide :: Point -> Point -> Point -> Point
+ divide alpha begin end = begin * (1 .- alpha) + end * alpha
+ 
++ninePointCircle :: Point -> Point -> Point -> Circle
++ninePointCircle a b c = circumcircle ((a+b)/2) ((b+c)/2) ((c+a)/2)
++
++poncelet :: Point -> Point -> Point -> Point -> Point
++poncelet a b c d =
++    let ab = (a+b)/2
++    in ccintersect ab (circumcircle ab ((b+c)/2) ((c+a)/2))
++                      (circumcircle ab ((a+d)/2) ((b+d)/2))
++
+ functions :: Map.Map String ([Shape] -> [Rand Shape])
+ functions = Map.fromList 
+     [   (
++        "PerpendicularLine", mkBuilder $ \a l ->
++        [ line a <$> rndPoint
++        , (`perpendicular` l) <$> rndPoint
++        , return (perpendicular a l)
++        ]
++    ), (
++        "IncircleTangentPoint", mkBuilder $ \a b c ->
++        let i = incenter a b c
++            t = project i (line b c)
++        in [ rndPointOnLine (line b c)
++           , rndPointOnCircle (circle i t)
++           , return t
++           ]
++    ), (
++        "FeuerbachPoint", mkBuilder $ \a b c ->
++        let i = incenter a b c
++        in [ rndPointOnCircle (circle i (project i (line b c)))
++           , rndPointOnCircle (ninePointCircle a b c)
++           , return (poncelet a b c i)
++           ]
++    ), (
++        "PonceletPoint", mkBuilder $ \a b c d ->
++        [ rndPointOnCircle (ninePointCircle a b c)
++        , rndPointOnCircle (ninePointCircle a b d)
++        , rndPointOnCircle (ninePointCircle a c d)
++        , rndPointOnCircle (ninePointCircle b c d)
++        , return (poncelet a b c d)
++        ]
++    ), (
++        "QuadrilateralCentroid", mkBuilder $ \a b c d ->
++        [ rndPointOnLine (line ((a+b)/2) ((c+d)/2))
++        , rndPointOnLine (line ((a+c)/2) ((b+d)/2))
++        , rndPointOnLine (line ((a+d)/2) ((b+c)/2))
++        , return ((a+b+c+d)/4)
++        ]
++    ), (
++        "HOPoint", mkBuilder $ \a b c ->
++        [ rndPointOnLine (line b c)
++        , return (b+c-project a (line b c))
++        ]
++    ), (
++        "FPC", mkBuilder $ \a b c ->
++        let h = orthocenter a b c
++            m = (b+c)/2
++            d = project a (line b c)
++        in [ (`circle` h) <$> rndPointOnLine (midline h m)
++           , (`circle` m) <$> rndPointOnLine (midline m d)
++           , (`circle` d) <$> rndPointOnLine (midline d h)
++           , return (circumcircle h m d)
++           ]
++    ), (
+         "CenterOfCircle", mkBuilder $ \c -> [rndPoint, return $ center c] :: [Rand Point]
+     ), (
+         "Harmonic", mkBuilder $ \a b c ->
+diff --git a/app/Parser.hs b/app/Parser.hs
+index 8286657..7211507 100644
+--- a/app/Parser.hs
++++ b/app/Parser.hs
+@@ -47,7 +47,9 @@ constructionParser = do
+     configuration <- name
+     void $ string ": "
+     points <- csvPts
+-    pure $ initials Map.! configuration $ points
++    case Map.lookup configuration initials of
++        Nothing -> fail ("Unsupported initial layout: " <> configuration)
++        Just build -> pure (build points)
+ 
+ 
+ commandParser :: Parser Command
+@@ -56,7 +58,9 @@ commandParser = do
+     void $ string " = "
+     command <- many1 letter
+     args <- getArgs
+-    pure $ Command newPoint args $ functions Map.! command
++    case Map.lookup command functions of
++        Nothing -> fail ("Unsupported construction: " <> command)
++        Just build -> pure (Command newPoint args build)
+ 
+ data ConclusionParseObj = Obj String | MkLine [String] | MkCircle [String] deriving Show
+ 
+@@ -97,7 +101,9 @@ conclusionParser = do
+     objects <- (conclObj <|> conclLine <|> conclCircle) `sepBy1` string ", "
+ 
+     let points = concatMap toArgs objects
+-    pure $ Conclusion points $ (factCheckers Map.! factName) . convertFromSimple objects
++    case Map.lookup factName factCheckers of
++        Nothing -> fail ("Unsupported theorem type: " <> factName)
++        Just checkFact -> pure (Conclusion points (checkFact . convertFromSimple objects))
+ 
+ theoremParser :: Parser ([Command], Conclusion)
+ theoremParser = do
+diff --git a/test/Regression.hs b/test/Regression.hs
+index 8c0e241..1bc0a20 100644
+--- a/test/Regression.hs
++++ b/test/Regression.hs
+@@ -2,6 +2,8 @@ module Main where
+ 
+ import Functions
+ import Extending
++import Parser (parseTheorem)
++import Data.List (isInfixOf)
+ import Types
+ import RandomGen
+ import qualified Data.Map as Map
+@@ -55,6 +57,36 @@ main = do
+     let circleFact = [constPointCmd "A" 0,constPointCmd "B" 2,
+                       Command "c" ["A","B"] (functions Map.! "CircleWithCenterThroughPoint")]
+     assert "defining circle incidence is filtered" (not (fixed (check10 circleFact (Conclusion ["B","c"] checkIncidence))))
++    let sourceLine = line 0 2
++        pl = fixed . last $ (functions Map.! "PerpendicularLine") [PointShape (0 :+ 1),LineShape sourceLine]
++    assert "perpendicular line through the point" (checkIncidence [PointShape (0 :+ 1),pl])
++    assert "perpendicular line direction" ((factCheckers Map.! "PerpendicularLines") [pl,LineShape sourceLine])
++    assert "contact on BC" (get "IncircleTangentPoint" args == 6)
++    assert "contact on AC" (get "IncircleTangentPoint" (map PointShape [b,a,c]) == (46/5 :+ 32/5))
++    assert "contact on AB" (get "IncircleTangentPoint" (map PointShape [c,a,b]) == (30/13 :+ 72/13))
++    assert "contact BC order" (get "IncircleTangentPoint" (map PointShape [a,c,b]) == 6)
++    assert "Feuerbach point" (get "FeuerbachPoint" args == (6 :+ 8))
++    assert "Poncelet point with incenter" (get "PonceletPoint" (args ++ [PointShape (6 :+ 4)]) == (6 :+ 8))
++    assert "quadrilateral centroid" (get "QuadrilateralCentroid" (args ++ [PointShape (2 :+ 3)]) == (21/4 :+ 15/4))
++    assert "HO point" (get "HOPoint" args == 9)
++    case fixed . last $ (functions Map.! "FPC") args of
++        CircleShape fc -> do
++            assert "FPC center" (center fc == (6 :+ 15/8))
++            assert "FPC radius" (radiusSqr fc == 289/64)
++        _ -> error "FPC must construct a circle"
++    let contactShapes = map (point . fixed) ((functions Map.! "IncircleTangentPoint") args)
++        ic = circle (6 :+ 4) 6
++    assert "contact weakened on side" (checkIncidence [PointShape (head contactShapes),LineShape (line b c)])
++    assert "contact weakened on incircle" (checkIncidence [PointShape (contactShapes !! 1),CircleShape ic])
++    let initial = "Triangle: A, B, C\n"
++        contacts = initial ++ "D = IncircleTangentPoint(A, B, C)\nE = IncircleTangentPoint(B, A, C)\nF = IncircleTangentPoint(C, A, B)\nCollinearPoints: B, C, D\n\n\n\n\n"
++    case parseTheorem "initial-contacts" contacts of
++        Left err -> error (show err)
++        Right (commands,conclusion) -> assert "three initial contacts can be checked" (not (fixed (check10 commands conclusion)))
++    let bad = initial ++ "D = MissingConstruction(A, B, C)\nCollinearPoints: B, C, D\n\n\n\n\n"
++    case parseTheorem "unsupported" bad of
++        Left err -> assert "missing construction is named" ("Unsupported construction: MissingConstruction" `isInfixOf` show err)
++        Right _ -> error "Unsupported construction must not be accepted"
+     let essential = [constPointCmd "A" 0,constPointCmd "B" 10,Command "M" ["A","B"] (functions Map.! "Midpoint")]
+     assert "essential midpoint equality survives" (fixed (check10 essential (Conclusion ["A","M","M","B"] (factCheckers Map.! "EqualLineSegments"))))
+     putStrLn "EXTENDING REGRESSION OK: six middles, angle vertex, incidence, primitives, essential theorem"
