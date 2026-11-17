@@ -9,6 +9,20 @@
 в один каталог с собственными .NET runtime и Java runtime. Конвертер собирается
 из того же Kotlin-кода под JVM, поэтому Windows/Kotlin Native не требуется.
 
+## Поиск внутри своего семейства
+
+Новый режим `discover` получает файл семейства и папку story-файлов, добавляет
+построения в заданных границах и запускает независимые поиски с общей лентой.
+Исходные условия сохраняются; ослабленные базы добавляются отдельными вариантами.
+Руководство, формат настроек и границы первой версии — [DISCOVERY.md](DISCOVERY.md).
+
+```bash
+bash build.sh build --output ./dist/geometry-suite-discovery --test
+cp -r ./dist/geometry-suite-discovery/examples/families/triangle ./my-family
+./dist/geometry-suite-discovery/geometry-suite discover ./my-family/family.json \
+  --output ./runs/my-family-001 --budget 10m --view
+```
+
 ## Быстрый старт
 
 Поддерживаемая цель: Linux x86_64, Debian 12/13 либо Ubuntu 22.04/24.04,

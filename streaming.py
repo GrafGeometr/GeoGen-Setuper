@@ -17,7 +17,7 @@ import time
 
 import runtime as app
 
-TERMINAL = ('ready', 'unchecked', 'rejected', 'error', 'timeout', 'duplicate')
+TERMINAL = ('ready', 'unchecked', 'rejected', 'error', 'timeout', 'duplicate', 'standard')
 
 
 def atomic_text(path, text):
@@ -160,23 +160,39 @@ def finding_filename(identifier, event):
     return f'{kind}_{score}__{identifier}.geo'
 
 
-def process_event(job, identifier, event, extending=True, check_ms=1000):
+def process_event(job, identifier, event, extending=True, check_ms=1000, standard=False):
     """One isolated process per check: crashes and timeouts never imply acceptance."""
     task_dir = job / 'tasks' / identifier
     task_dir.mkdir(parents=True, exist_ok=True)
     diagnostic = task_dir / 'worker.log'
     try:
+        if standard:
+            from standard_reasoning import check, verify_certificate
+            proof = check(event['configuration'], event['theorem'])
+            if proof['status'] == 'proved' and proof['cost'] <= 12 and verify_certificate(event['configuration'], event['theorem'], proof):
+                atomic_text(task_dir / 'standard-proof.json', json.dumps(proof, ensure_ascii=False, indent=2))
+                return {'state': 'standard', 'message': 'Короткое стандартное доказательство: ' + proof['method']}
         if extending:
             check_file = task_dir / 'check.geo'
             text = event['configuration'].rstrip() + '\n' + event['theorem'] + '\n\n\n\n\n'
             check_file.write_text(''.join('!' + line + '\n' for line in text.splitlines()), encoding='utf-8')
-            checked = subprocess.run([str(app.EXTENDING), '--check-file', str(check_file), str(check_ms)],
-                                     text=True, capture_output=True, timeout=check_ms / 1000 + 5,
-                                     start_new_session=True)
-            diagnostic.write_text(checked.stdout + checked.stderr, encoding='utf-8')
-            if checked.returncode:
-                raise RuntimeError(f'Extending exited with {checked.returncode}; see {diagnostic}')
-            response = json.loads(checked.stdout)
+            deadline = time.monotonic() + check_ms / 1000
+            diagnostic.write_text('', encoding='utf-8')
+            for attempt in range(4):
+                remaining_ms = max(1, int((deadline - time.monotonic()) * 1000))
+                checked = subprocess.run([str(app.EXTENDING), '--check-file', str(check_file), str(remaining_ms)],
+                                         text=True, capture_output=True, timeout=remaining_ms / 1000 + 5,
+                                         start_new_session=True)
+                with diagnostic.open('a', encoding='utf-8') as log:
+                    log.write(checked.stdout + checked.stderr)
+                if checked.returncode:
+                    raise RuntimeError(f'Extending exited with {checked.returncode}; see {diagnostic}')
+                response = json.loads(checked.stdout)
+                # A singular random weakening is not evidence for or against the theorem.
+                # Retry only this recognized arithmetic degeneracy, within the original deadline.
+                if not (response.get('status') == 'error' and response.get('message') == 'Ratio has zero denominator'
+                        and time.monotonic() < deadline and attempt < 3):
+                    break
             status = response.get('status')
             if status not in ('accepted', 'rejected', 'error', 'timeout'):
                 raise RuntimeError('Invalid Extending response')
@@ -223,7 +239,7 @@ def stop_producer(process):
             process.wait()
 
 
-def consume(job, metadata, *, producer=None, workers=2, extending=True, check_ms=1000, timeout=3600):
+def consume(job, metadata, *, producer=None, workers=2, extending=True, check_ms=1000, timeout=3600, standard=False):
     queue = Queue(job)
     queue.db.execute("UPDATE tasks SET state='queued' WHERE state='processing'")
     queue.db.commit()
@@ -273,7 +289,7 @@ def consume(job, metadata, *, producer=None, workers=2, extending=True, check_ms
                 row = queue.take()
                 if not row:
                     break
-                future = pool.submit(process_event, job, row['id'], json.loads(row['event']), extending, check_ms)
+                future = pool.submit(process_event, job, row['id'], json.loads(row['event']), extending, check_ms, standard)
                 pending[future] = row['id']
                 changed = True
             if changed:
@@ -313,7 +329,7 @@ def consume(job, metadata, *, producer=None, workers=2, extending=True, check_ms
     return job
 
 
-def run_stream(input_file, job, *, workers=2, extending=True, check_ms=1000, timeout=3600, view=False):
+def run_stream(input_file, job, *, workers=2, extending=True, check_ms=1000, timeout=3600, view=False, standard=False):
     input_file, job = Path(input_file).resolve(), Path(job).resolve()
     if not input_file.is_file():
         raise RuntimeError(f'Нет исходного сюжета: {input_file}')
@@ -332,7 +348,7 @@ def run_stream(input_file, job, *, workers=2, extending=True, check_ms=1000, tim
     env['DOTNET_ROOT'] = str(app.DOTNET.parent)
     env['DOTNET_MULTILEVEL_LOOKUP'] = '0'
     env['DOTNET_PROCESSOR_COUNT'] = str(max(1, workers))
-    metadata = {'version': 1, 'createdAt': time.time(), 'extending': extending, 'checkMs': check_ms, 'searchState': 'running'}
+    metadata = {'version': 1, 'createdAt': time.time(), 'extending': extending, 'checkMs': check_ms, 'searchState': 'running', 'standardChecks': standard}
     with job_lock(job), (job / 'geogen.log').open('w') as log:
         producer = subprocess.Popen([str(app.DOTNET), str(app.ROOT / 'lib/geogen/GeoGen.MainLauncher.dll'), str(config)],
                                     cwd=job, env=env, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
@@ -345,7 +361,7 @@ def run_stream(input_file, job, *, workers=2, extending=True, check_ms=1000, tim
                 subprocess.Popen([str(app.VIEWER), '--watch', str(job)], env=env, start_new_session=True,
                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             return consume(job, metadata, producer=producer, workers=workers, extending=extending,
-                           check_ms=check_ms, timeout=timeout)
+                           check_ms=check_ms, timeout=timeout, standard=standard)
         finally:
             stop_producer(producer)
 
@@ -368,4 +384,4 @@ def resume(job, *, workers=2, retry_errors=False):
             queue.db.execute("UPDATE tasks SET state='queued',message='',finished=NULL WHERE state IN ('error','timeout')")
             queue.db.commit()
             queue.close()
-        return consume(job, metadata, workers=workers, extending=metadata['extending'], check_ms=metadata['checkMs'])
+        return consume(job, metadata, workers=workers, extending=metadata['extending'], check_ms=metadata['checkMs'], standard=metadata.get('standardChecks', False))

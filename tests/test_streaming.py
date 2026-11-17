@@ -65,6 +65,23 @@ class StreamingTests(unittest.TestCase):
         finally:
             queue.close()
 
+    def test_standard_proof_needs_no_external_checker_or_converter(self):
+        with patch.object(streaming.subprocess, 'run') as process:
+            result = streaming.process_event(self.job, 'story_0001', self.event(), standard=True)
+        self.assertEqual(result['state'], 'standard')
+        process.assert_not_called()
+        self.assertTrue((self.job/'tasks/story_0001/standard-proof.json').is_file())
+
+    def test_singular_probe_is_retried_but_never_accepted_as_evidence(self):
+        answers = [types.SimpleNamespace(returncode=0, stdout=json.dumps(dict(status='error',message='Ratio has zero denominator')),stderr=''),
+                   types.SimpleNamespace(returncode=0, stdout=json.dumps(dict(status='rejected',message='redundant')),stderr='')]
+        with patch.object(streaming.subprocess, 'run', side_effect=answers) as process:
+            result = streaming.process_event(self.job, 'story_0001', self.event())
+        self.assertEqual(result['state'], 'rejected')
+        self.assertEqual(process.call_count, 2)
+        self.assertLessEqual(int(process.call_args_list[1].args[0][-1]), int(process.call_args_list[0].args[0][-1]))
+        self.assertEqual(list((self.job/'geo').iterdir()), [])
+
     def test_worker_rejection_never_calls_converter(self):
         response = types.SimpleNamespace(returncode=0, stdout='{"status":"rejected","message":"redundant"}', stderr='')
         with patch.object(streaming.subprocess, 'run', return_value=response) as process:

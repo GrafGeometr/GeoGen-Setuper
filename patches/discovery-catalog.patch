@@ -1,0 +1,75 @@
+diff --git a/Source/Launchers/GeoGen.MainLauncher/Program.cs b/Source/Launchers/GeoGen.MainLauncher/Program.cs
+index b502a97..ee75b1f 100644
+--- a/Source/Launchers/GeoGen.MainLauncher/Program.cs
++++ b/Source/Launchers/GeoGen.MainLauncher/Program.cs
+@@ -25,7 +25,14 @@ namespace GeoGen.MainLauncher
+         /// The entry method of the application.
+         /// </summary>
+         /// <param name="customConfigurationFilePaths"><inheritdoc cref="Application.Run(string[], Func{IKernel, JsonConfiguration, Task})"/></param>
+-        public static async Task Main(string[] customConfigurationFilePaths) => await Application.Run(customConfigurationFilePaths, async (kernel, settings) =>
++        public static async Task Main(string[] customConfigurationFilePaths)
++        {
++            if (customConfigurationFilePaths.Length == 2 && customConfigurationFilePaths[0] == "--export-catalog")
++            {
++                CatalogExporter.Write(customConfigurationFilePaths[1]);
++                return;
++            }
++            await Application.Run(customConfigurationFilePaths, async (kernel, settings) =>
+         {
+             // Initialize the container
+             await PrepareDIContainer(kernel, settings);
+@@ -43,6 +50,7 @@ namespace GeoGen.MainLauncher
+             // Run the algorithm
+             await kernel.Get<IBatchRunner>().FindAllInputFilesAndRunProblemGenerationAsync();
+         });
++        }
+ 
+         /// <summary>
+         /// Initializes the NInject kernel.
+diff --git a/Source/Launchers/GeoGen.MainLauncher/CatalogExporter.cs b/Source/Launchers/GeoGen.MainLauncher/CatalogExporter.cs
+new file mode 100644
+index 0000000..ea777f7
+--- /dev/null
++++ b/Source/Launchers/GeoGen.MainLauncher/CatalogExporter.cs
+@@ -0,0 +1,41 @@
++using GeoGen.Core;
++using Newtonsoft.Json;
++
++namespace GeoGen.MainLauncher
++{
++    /// <summary>Export semantic signatures without initializing the runner or clearing outputs.</summary>
++    public static class CatalogExporter
++    {
++        private static object Parameter(ConstructionParameter parameter) => parameter switch
++        {
++            ObjectConstructionParameter p => new { type = p.ObjectType.ToString() },
++            SetConstructionParameter p => new { count = p.NumberOfParameters, item = Parameter(p.TypeOfParameters) },
++            _ => throw new InvalidOperationException("Unsupported construction parameter")
++        };
++
++        public static void Write(string file)
++        {
++            var constructions = Constructions.GetAllConstructions().OrderBy(c => c.Name).ToArray();
++            var data = new
++            {
++                version = 1,
++                constructions = constructions.Select(c => new
++                {
++                    name = c.Name,
++                    output = c.OutputType.ToString(),
++                    arguments = c.Signature.ObjectTypes.Select(t => t.ToString()),
++                    parameters = c.Signature.Parameters.Select(Parameter),
++                    composed = c is ComposedConstruction,
++                    definition = c is ComposedConstruction cc
++                        ? new OutputFormatter(cc.Configuration.AllObjects).FormatConfiguration(cc.Configuration) : null
++                }),
++                layouts = Enum.GetValues<LooseObjectLayout>().Select(l => new
++                {
++                    name = l.ToString(),
++                    arguments = l.ObjectTypes().Select(t => t.ToString())
++                })
++            };
++            File.WriteAllText(file, JsonConvert.SerializeObject(data, Formatting.Indented));
++        }
++    }
++}

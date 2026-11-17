@@ -63,6 +63,21 @@ def check_construction_coverage(work: Path):
     return {'required': sorted(required), 'extending': sorted(extending), 'converter': sorted(converter)}
 
 
+def enrich_catalog(path: Path, work: Path):
+    """Compute end-to-end layout support from the actual packaged backend registries."""
+    catalog = json.loads(path.read_text())
+    haskell = (work / 'GeometryExtending/app/Functions.hs').read_text().partition('initials = Map.fromList')[2]
+    checker = set(re.findall(r'"(\w+)"\s*,', haskell))
+    kotlin = (work / 'Geometry/GeoGenIntegration/src/nativeMain/kotlin/Main.kt').read_text()
+    initial = kotlin.partition('fun GeoGenContext.parseGeoGenInitial')[2].partition('fun GeoGenContext.parseGeoGenLine')[0]
+    converter = set(re.findall(r'"(\w+)"\s*->', initial))
+    for layout in catalog['layouts']:
+        layout['pipelineSupported'] = layout['name'] in checker & converter
+    if not any(l['pipelineSupported'] for l in catalog['layouts']):
+        raise BuildError('Нет сквозной поддержки исходных конфигураций')
+    path.write_text(json.dumps(catalog, ensure_ascii=False, indent=2))
+
+
 def write(path: Path, content: str, executable: bool = False):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding='utf-8')
@@ -286,6 +301,7 @@ class Builder:
         self.apply_source_patch(self.work / 'Geometry', HERE / 'patches/custom-constructions-geometry.patch')
         self.apply_source_patch(self.work / 'GeometryExtending', HERE / 'patches/extending-construction-coverage.patch')
         self.apply_source_patch(self.work / 'Geometry', HERE / 'patches/geometry-construction-coverage.patch')
+        self.apply_source_patch(self.work / 'GeoGen', HERE / 'patches/discovery-catalog.patch')
         coverage = check_construction_coverage(self.work)
         if self.stage.exists():
             shutil.rmtree(self.stage)
@@ -305,6 +321,9 @@ class Builder:
         self.run([self.dotnet, 'publish', project, '--no-restore', '-c', 'Release',
                   '--self-contained', 'false', '-o', self.stage / 'lib/geogen', '-m:1'],
                  cwd=geogen, name='geogen-publish')
+        self.run([self.dotnet, self.stage / 'lib/geogen/GeoGen.MainLauncher.dll',
+                  '--export-catalog', self.stage / 'data/construction-catalog.json'], name='construction-catalog')
+        enrich_catalog(self.stage / 'data/construction-catalog.json', self.work)
         if self.args.test:
             self.run([self.dotnet, 'test', geogen / 'GeoGen.sln', '-c', 'Release', '-m:1'] +
                      ([f'-p:RestoreConfigFile={offline_config}'] if self.args.offline else []),
@@ -390,6 +409,9 @@ class Builder:
                   '--output', self.stage / 'lib/java'], name='converter-jre')
         shutil.copy2(HERE / 'runtime.py', self.stage / 'runtime.py')
         shutil.copy2(HERE / 'streaming.py', self.stage / 'streaming.py')
+        for module in ('families.py', 'discovery.py', 'standard_reasoning.py'):
+            shutil.copy2(HERE / module, self.stage / module)
+        shutil.copytree(HERE / 'examples/families', self.stage / 'examples/families')
         write(self.stage / 'geometry-suite', '#!/bin/sh\nset -eu\nsuite_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)\nexec python3 "$suite_dir/runtime.py" "$@"\n', True)
         write(self.stage / 'BUILD.json', json.dumps({
             'built_at_utc': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
@@ -398,6 +420,7 @@ class Builder:
             'gradle': GRADLE_VERSION, 'jdk': '17',
             'patches': ['Atomic theorem stream, structured Extending checks, live Geometry results',
                         'Complete downstream construction coverage and named parser errors',
+                        'Machine construction catalog and bounded family discovery campaigns',
                         'Defining rules for further custom constructions and consistent proof notation',
                         'Custom-construction identities, primitive support, middle-point inference rules',
                         'Consistent Extending definitions and incidence checks; converter coverage',
@@ -407,6 +430,7 @@ class Builder:
                         'threaded RTS for Extending']}, indent=2))
         shutil.copy2(HERE / 'README.md', self.stage / 'BUILDER-README.md')
         shutil.copy2(HERE / 'CONSTRUCTION_RULES.md', self.stage / 'CONSTRUCTION_RULES.md')
+        shutil.copy2(HERE / 'DISCOVERY.md', self.stage / 'DISCOVERY.md')
         # A broken build must never replace the last working installation.
         self.run([sys.executable, self.stage / 'runtime.py', 'smoke', '--output', self.work / ('smoke-' + uuid.uuid4().hex[:8])], name='smoke')
         dest = self.args.output.resolve()

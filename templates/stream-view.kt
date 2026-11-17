@@ -20,7 +20,7 @@ import kotlinx.coroutines.launch
 
 private val labels = mapOf("queued" to "Ожидает", "processing" to "Проверяется", "ready" to "Готово",
     "unchecked" to "Без проверки", "rejected" to "Отбраковано", "timeout" to "Таймаут",
-    "error" to "Ошибка", "duplicate" to "Повтор", "searching" to "Идёт поиск",
+    "error" to "Ошибка", "standard" to "Стандартный вывод", "duplicate" to "Повтор", "searching" to "Идёт поиск",
     "draining" to "Обработка очереди", "finished" to "Завершено", "stopped" to "Остановлено", "failed" to "Сбой поиска")
 
 @Composable

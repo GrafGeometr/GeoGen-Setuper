@@ -1,0 +1,12 @@
+Constructions:
+Midpoint
+PerpendicularProjectionOnLineFromPoints
+
+Initial configuration:
+RightTriangle: A, B, C
+
+Iterations: 2
+MaximalPoints: 3
+MaximalLines: 0
+MaximalCircles: 0
+SymmetryGenerationMode: GenerateBothSymmetricAndAsymmetric

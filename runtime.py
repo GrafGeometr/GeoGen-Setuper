@@ -236,6 +236,27 @@ SymmetryGenerationMode: GenerateBothSymmetricAndAsymmetric
     with sqlite3.connect(contact_job / 'tasks.sqlite') as db:
         if db.execute('SELECT count(*) FROM tasks').fetchone()[0]:
             raise RuntimeError('GeoGen still publishes defining incircle contact facts.')
+    # A bounded user-family campaign exercises two real producers and one shared catalog/queue.
+    from discovery import create as create_campaign, run as resume_campaign
+    from families import Catalog
+    catalog = Catalog.read(ROOT / 'data/construction-catalog.json')
+    if len(catalog.constructions) != 72 or catalog.layouts['LineAndPoint']['pipelineSupported']:
+        raise RuntimeError('Неправильный каталог возможностей.')
+    campaign_family = output / 'family.json'
+    campaign_family.write_text(json.dumps(dict(version=1, stories=[str(ROOT / 'examples/input_projections.txt')],
+        growth={'maxAddedDefinitions': 0}, search={'maxDepth': 1, 'maxJobs': 2, 'sliceSeconds': 10, 'maxPaletteSize': 1})))
+    campaign = create_campaign(campaign_family, output / 'campaign', budget=15, search_workers=2, check_workers=2)
+    with sqlite3.connect(campaign / 'tasks.sqlite') as db:
+        if db.execute("SELECT count(*) FROM search_jobs WHERE state='failed'").fetchone()[0]:
+            raise RuntimeError('GeoGen failed in family campaign.')
+        if not db.execute("SELECT count(*) FROM tasks WHERE state='ready'").fetchone()[0]:
+            raise RuntimeError('Family campaign produced no checked diagrams.')
+        if db.execute("SELECT count(*) FROM tasks WHERE state IN ('queued','processing','error')").fetchone()[0]:
+            raise RuntimeError('Family campaign left errors or unfinished checks.')
+    before = (campaign / 'results.tsv').read_bytes()
+    resume_campaign(campaign)
+    if (campaign / 'results.tsv').read_bytes() != before:
+        raise RuntimeError('Completed campaign was modified by resume.')
     if not VIEWER.is_file():
         raise RuntimeError('Не найден launcher Geometry.')
     print('SMOKE OK: GeoGen → JVM-конвертер → .geo; Extending на контрольных примерах; Geometry упакован.')
@@ -248,12 +269,23 @@ def main():
     run.add_argument('input', type=Path)
     run.add_argument('--output', type=Path, required=True, help='Новый каталог запуска')
     run.add_argument('--no-check', action='store_true')
+    run.add_argument('--standard-checks', action='store_true', help='Отсеивать короткие точные угловые/аффинные следствия')
     run.add_argument('--batch', action='store_true', help='Прежний последовательный режим: подборка лучших после завершения поиска')
     run.add_argument('--workers', type=int, default=2, help='Параллельные обработчики находок')
     run.add_argument('--check-ms', type=int, default=1000, help='Лимит одной проверки Extending, мс')
     run.add_argument('--view', action='store_true', help='Сразу открыть список поступающих результатов')
     run.add_argument('--software', action='store_true')
     run.add_argument('--timeout', type=int, default=3600, help='Лимит поиска GeoGen в секундах; после него полученная очередь сохраняется и обрабатывается')
+    discover = commands.add_parser('discover', help='Исследовать пользовательское семейство сюжетов')
+    discover.add_argument('family', type=Path)
+    discover.add_argument('--output', type=Path, required=True)
+    discover.add_argument('--budget', default='10m', help='Общий бюджет поиска: 30s, 10m, 8h')
+    discover.add_argument('--search-workers', type=int, default=2)
+    discover.add_argument('--check-workers', type=int, default=2)
+    discover.add_argument('--check-ms', type=int, default=1000)
+    discover.add_argument('--view', action='store_true')
+    discover.add_argument('--software', action='store_true')
+    commands.add_parser('catalog', help='Показать каталог построений и поддержку исходных конфигураций')
     conv = commands.add_parser('convert', help='Подборка ReadableBestTheorems → .geo')
     conv.add_argument('input', type=Path)
     conv.add_argument('output', type=Path)
@@ -272,24 +304,51 @@ def main():
     resume.add_argument('directory', type=Path)
     resume.add_argument('--workers', type=int, default=2)
     resume.add_argument('--retry-errors', action='store_true')
+    resume.add_argument('--budget', help='Добавочный бюджет поиска для кампании, например 10m')
+    resume.add_argument('--search-workers', type=int)
+    resume.add_argument('--check-workers', type=int)
     commands.add_parser('doctor', help='Проверить комплект и динамические библиотеки')
     args = parser.parse_args()
     if getattr(args, 'workers', 1) < 1 or getattr(args, 'workers', 1) > 64:
         parser.error('--workers должен быть в диапазоне 1..64')
     if not 1 <= getattr(args, 'check_ms', 1000) <= 3600000 or getattr(args, 'timeout', 1) < 1:
         parser.error('Лимиты времени должны быть положительными; --check-ms не более 3600000')
-    if args.command == 'run':
+    for key in ('search_workers', 'check_workers'):
+        value = getattr(args, key, None)
+        if value is not None and not 1 <= value <= 32:
+            parser.error('--' + key.replace('_', '-') + ' должен быть в диапазоне 1..32')
+    if args.command == 'discover':
+        from discovery import create, seconds
         if args.software:
             os.environ['SKIKO_RENDER_API'] = 'SOFTWARE'
+        if args.view and not (os.environ.get('DISPLAY') or os.environ.get('WAYLAND_DISPLAY')):
+            parser.error('Для --view нужна графическая сессия')
+        create(args.family, args.output, budget=seconds(args.budget), search_workers=args.search_workers,
+               check_workers=args.check_workers, check_ms=args.check_ms, view=args.view)
+    elif args.command == 'catalog':
+        print((ROOT / 'data/construction-catalog.json').read_text())
+    elif args.command == 'run':
+        if args.software:
+            os.environ['SKIKO_RENDER_API'] = 'SOFTWARE'
+        if args.batch and args.standard_checks:
+            parser.error('--standard-checks поддержан в потоковом режиме')
         if args.batch:
             run_pipeline(args.input, args.output, extending=not args.no_check, timeout=args.timeout)
         else:
             from streaming import run_stream
             run_stream(args.input, args.output, workers=args.workers, extending=not args.no_check,
-                       check_ms=args.check_ms, timeout=args.timeout, view=args.view)
+                       check_ms=args.check_ms, timeout=args.timeout, view=args.view, standard=args.standard_checks)
     elif args.command == 'resume':
-        from streaming import resume
-        resume(args.directory, workers=args.workers, retry_errors=args.retry_errors)
+        metadata = json.loads((args.directory / 'run-state.json').read_text())
+        if metadata.get('kind') == 'campaign':
+            from discovery import run, seconds
+            run(args.directory, extra_budget=seconds(args.budget) if args.budget else 0,
+                search_workers=args.search_workers, check_workers=args.check_workers, retry_errors=args.retry_errors)
+        else:
+            if args.budget or args.search_workers or args.check_workers:
+                parser.error('Дополнительный бюджет/работники поиска поддержаны только для кампаний')
+            from streaming import resume
+            resume(args.directory, workers=args.workers, retry_errors=args.retry_errors)
     elif args.command == 'watch':
         if not args.directory.is_dir():
             raise RuntimeError('Нет каталога запуска: ' + str(args.directory))
@@ -332,7 +391,7 @@ def main():
 if __name__ == '__main__':
     try:
         main()
-    except (RuntimeError, OSError, subprocess.SubprocessError) as error:
+    except (RuntimeError, ValueError, OSError, subprocess.SubprocessError) as error:
         print(f'Ошибка: {error}', file=sys.stderr)
         sys.exit(1)
     except KeyboardInterrupt:

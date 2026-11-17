@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "name": "Проекции и середины в треугольнике",
+  "stories": ["stories/*.txt"],
+  "allowedConstructions": ["Midpoint", "PerpendicularProjectionOnLineFromPoints", "Orthocenter"],
+  "includeRelaxations": true,
+  "seed": 17,
+  "growth": {"maxAddedDefinitions": 1, "variantsPerStory": 6},
+  "search": {"maxDepth": 3, "maxJobs": 12, "sliceSeconds": 15, "maxPaletteSize": 2}
+}
