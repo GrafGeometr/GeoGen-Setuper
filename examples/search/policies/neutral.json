@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "policy": "soft",
+  "seconds": 600,
+  "seed": 17,
+  "keepOutsideTargetsPercent": 100,
+  "phases": [
+    {}
+  ]
+}

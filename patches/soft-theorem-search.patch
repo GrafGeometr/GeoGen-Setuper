@@ -1,0 +1,698 @@
+diff --git a/Source/Library/GeoGen.ProblemGenerator/ProblemGenerator.cs b/Source/Library/GeoGen.ProblemGenerator/ProblemGenerator.cs
+--- a/Source/Library/GeoGen.ProblemGenerator/ProblemGenerator.cs
++++ b/Source/Library/GeoGen.ProblemGenerator/ProblemGenerator.cs
+@@ -84,9 +84,18 @@
+         public (TheoremMap initialTheorems, IEnumerable<ProblemGeneratorOutput> generationOutputs) Generate(ProblemGeneratorInput input)
+         {
+             var policyPath = Environment.GetEnvironmentVariable("GEOGEN_THEOREM_SEARCH_CONFIG");
+-            if (!string.IsNullOrWhiteSpace(policyPath))
+-                return GenerateTheoremSearch(input, TheoremSearchSettings.Read(policyPath));
+-
++            var policy = string.IsNullOrWhiteSpace(policyPath) ? null : TheoremSearchSettings.Read(policyPath);
++            return policy == null || policy.Policy == "soft"
++                ? GenerateStandard(input, policy)
++                : GenerateTheoremSearch(input, policy);
++        }
++
++        /// <summary>The historical DFS and early symmetry pruning; optional bias lives in its verifier.</summary>
++        public (TheoremMap initialTheorems, IEnumerable<ProblemGeneratorOutput> generationOutputs)
++            GenerateStandard(ProblemGeneratorInput input, TheoremSearchSettings policy = null)
++        {
++            if (policy != null && policy.Policy != "soft") throw new ArgumentException("Expected soft policy");
++            policy?.Validate();
+             #region Preparing variables
+ 
+             // Prepare the stack for pictures of configurations that will be extended
+@@ -136,6 +145,15 @@
+             // Cache the initial theorems
+             theoremMapCache.Push(initialTheorems);
+ 
++            var bias = policy == null ? null : new SoftTheoremBias(policy, input, _settings.NumberOfPictures);
++            var checkpoints = bias?.NeedsMetrics == true ? new Stack<SoftTheoremBias.Checkpoint>() : null;
++            checkpoints?.Push(new SoftTheoremBias.Checkpoint(
++                input.InitialConfiguration.ObjectMap.GetObjectsForKeys(ConfigurationObjectType.Point).Count(), 0));
++            GeneratedConfiguration preparedConfiguration = null;
++            TheoremMap preparedNew = null, preparedAll = null;
++            Theorem[] preparedInvalid = null;
++            SoftTheoremBias.Checkpoint preparedCheckpoint = null;
++
+             #endregion
+ 
+             #region Configuration verification function
+@@ -144,6 +162,8 @@
+             // While doing so it construct pictures that we can reuse further for finding theorems
+             bool VerifyConfigurationCorrectness(GeneratedConfiguration configuration)
+             {
++                bias?.BeforeCandidate();
++                preparedConfiguration = null; preparedCheckpoint = null;
+                 #region Handling cache
+ 
+                 // We assume that the generator uses a memory-efficient DFS approach, i.e.
+@@ -159,9 +179,12 @@
+                     picturesCache.Pop();
+                     contextualPictureCache.Pop();
+                     theoremMapCache.Pop();
++                    checkpoints?.Pop();
+                 });
+ 
+                 #endregion
++
++                if (bias != null && !bias.AllowsRoot(configuration)) return false;
+ 
+                 #region Exclusion based on symmetry
+ 
+@@ -228,12 +251,16 @@
+ 
+                 // If we should exclude this configuration because of symmetry, do it
+                 if (excludeBecauseOfSymmetry)
++                {
++                    bias?.SymmetryPruned();
+                     return false;
++                }
+ 
+                 #endregion
+ 
+                 #region Pictures construction
+ 
++                bias?.BeforeDrawing();
+                 // Get the previous pictures
+                 var previousPictures = picturesCache.Peek();
+ 
+@@ -253,7 +280,10 @@
+ 
+                 // Exclude incorrect configuration
+                 if (isConfigurationIncorrect)
++                {
++                    bias?.InvalidDrawing();
+                     return false;
++                }
+ 
+                 // We have to remember the pictures for further use
+                 picturesCache.Push(newPictures);
+@@ -277,6 +307,7 @@
+                 {
+                     // We need to make sure the already constructed pictures are discarded
+                     picturesCache.Pop();
++                    bias?.InvalidDrawing();
+ 
+                     // And we say the configuration is incorrect
+                     return false;
+@@ -286,6 +317,27 @@
+                 contextualPictureCache.Push(newContextualPicture);
+ 
+                 #endregion
++
++                if (bias?.NeedsMetrics == true)
++                {
++                    // Never filter an unfinished symmetry orbit using properties of its first member.
++                    if (bias.IsCheckpoint(configuration))
++                    {
++                        var began = System.Diagnostics.Stopwatch.GetTimestamp();
++                        preparedNew = _finder.FindNewTheorems(newContextualPicture, theoremMapCache.Peek(), out preparedInvalid);
++                        bias.FoundTheorems(System.Diagnostics.Stopwatch.GetElapsedTime(began).TotalMilliseconds);
++                        preparedAll = new TheoremMap(theoremMapCache.Peek().AllObjects.Except(preparedInvalid).Concat(preparedNew.AllObjects));
++                        var observation = bias.Observe(configuration, preparedAll, checkpoints.Peek());
++                        if (!bias.Keep(observation))
++                        {
++                            contextualPictureCache.Pop(); picturesCache.Pop();
++                            return false;
++                        }
++                        preparedConfiguration = configuration;
++                        preparedCheckpoint = observation.Next;
++                    }
++                    else bias.Incomplete();
++                }
+ 
+                 // If we got here, everything's fine
+                 return true;
+@@ -310,7 +362,7 @@
+             );
+ 
+             // Return the tuple of initial theorems and a lazy algorithm enumerable
+-            return (initialTheorems, _generator.Generate(generatorInput)
++            var outputs = _generator.Generate(generatorInput)
+                    // For each configuration perform the subsequent algorithms
+                    .Select(configuration =>
+                    {
+@@ -320,16 +372,27 @@
+                        // Get the previous of the previous configuration
+                        var oldTheorems = theoremMapCache.Peek();
+ 
+-                       // Find new theorems
+-                       var newTheorems = _finder.FindNewTheorems(contextualPicture, oldTheorems, out var invalidOldTheorems);
++                       // A checkpoint inspected in the verifier reuses its finder result.
++                       TheoremMap newTheorems;
++                       Theorem[] invalidOldTheorems;
++                       if (ReferenceEquals(preparedConfiguration, configuration))
++                       { newTheorems = preparedNew; invalidOldTheorems = preparedInvalid; }
++                       else
++                       {
++                           var began = bias == null ? 0 : System.Diagnostics.Stopwatch.GetTimestamp();
++                           newTheorems = _finder.FindNewTheorems(contextualPicture, oldTheorems, out invalidOldTheorems);
++                           if (bias != null) bias.FoundTheorems(System.Diagnostics.Stopwatch.GetElapsedTime(began).TotalMilliseconds);
++                       }
+ 
+                        // Reset the old theorems by excluding the already invalid ones
+ 
+                        // Find all theorems by merging the old ones, excluding the invalid ones, adding the new ones
+-                       var allTheorems = new TheoremMap(oldTheorems.AllObjects.Except(invalidOldTheorems).Concat(newTheorems.AllObjects));
++                       var allTheorems = ReferenceEquals(preparedConfiguration, configuration) ? preparedAll :
++                           new TheoremMap(oldTheorems.AllObjects.Except(invalidOldTheorems).Concat(newTheorems.AllObjects));
+ 
+                        // Cache the theorems for this configuration
+                        theoremMapCache.Push(allTheorems);
++                       if (checkpoints != null) checkpoints.Push(preparedCheckpoint ?? checkpoints.Peek());
+ 
+                        // Find out if we should exclude this configuration based on symmetry which is 
+                        // true if we are supposed to do so
+@@ -364,7 +427,8 @@
+                        );
+                    })
+                    // Ignore excluded ones
+-                   .Where(output => output != null));
++                   .Where(output => output != null);
++            return (initialTheorems, bias == null ? outputs : bias.Track(outputs));
+ 
+             #endregion
+         }
+diff --git a/Source/Library/GeoGen.ProblemGenerator/TheoremSearchSettings.cs b/Source/Library/GeoGen.ProblemGenerator/TheoremSearchSettings.cs
+--- a/Source/Library/GeoGen.ProblemGenerator/TheoremSearchSettings.cs
++++ b/Source/Library/GeoGen.ProblemGenerator/TheoremSearchSettings.cs
+@@ -19,12 +19,18 @@
+     public int MaxEvaluated { get; set; } = int.MaxValue;
+     public int LogEveryExpanded { get; set; } = 20;
+     public string Policy { get; set; } = "density";
++    // Soft mode retains the original generator, symmetry reachability, and DFS order.
++    public double KeepOutsideTargetsPercent { get; set; } = 100;
++    public bool CollectReference { get; set; } = false;
++    public string ReferenceFile { get; set; }
++    public string ReferenceRootConstruction { get; set; }
+     public string Scope { get; set; } = "all";
+     public int RecentPoints { get; set; } = 3;
+     public double PointExponent { get; set; } = 1;
+     public double PointOffset { get; set; } = 0;
+     public double LocalTheoremWeight { get; set; } = 1;
+     public Dictionary<TheoremType, double> TypeWeights { get; set; } = new();
++    public TheoremSearchPhase Final { get; set; }
+     public TheoremSearchPhase[] Phases { get; set; } = new[] { new TheoremSearchPhase() };
+     public int EmitFromDepth { get; set; } = 1;
+     public bool RequireNonLocalTheorem { get; set; } = false;
+@@ -47,6 +53,7 @@
+         {
+             settings.TraceFile ??= Path.Combine(output, "search-trace.jsonl");
+             settings.CandidatesFile ??= Path.Combine(output, "search-candidates.jsonl");
++            if (settings.CollectReference) settings.ReferenceFile ??= Path.Combine(output, "search-reference.json");
+             Directory.CreateDirectory(output);
+             File.WriteAllText(Path.Combine(output, "search-settings.json"), JsonSerializer.Serialize(settings, JsonOptions));
+         }
+@@ -60,12 +67,19 @@
+             MaxVisited < 1 || MaxEvaluated < 1 || LogEveryExpanded < 1 || RecentPoints < 1 || EmitFromDepth < 1 ||
+             !double.IsFinite(PointExponent) || PointExponent < 0 || !double.IsFinite(PointOffset) || PointOffset < 0 ||
+             !double.IsFinite(LocalTheoremWeight) || LocalTheoremWeight < 0 ||
+-            (Policy != "density" && Policy != "uniform") ||
++            (Policy != "density" && Policy != "uniform" && Policy != "soft") ||
+             !new[] { "all", "recent", "newest", "weakest" }.Contains(Scope) ||
+             TypeWeights.Any(p => !Enum.IsDefined(p.Key) || !double.IsFinite(p.Value) || p.Value < 0) ||
+             Phases == null || Phases.Length == 0)
+             throw new ArgumentException("Invalid theorem search settings");
+-        foreach (var phase in Phases)
++        if (!double.IsFinite(KeepOutsideTargetsPercent) || KeepOutsideTargetsPercent < 0 || KeepOutsideTargetsPercent > 100)
++            throw new ArgumentException("keepOutsideTargetsPercent must be between 0 and 100");
++        if (ReferenceRootConstruction != null && !CollectReference)
++            throw new ArgumentException("ReferenceRootConstruction is only available for reference collection");
++        foreach (var phase in Final == null ? Phases : Phases.Concat(new[] { Final }))
++        {
++            phase.TheoremsPerPoint?.Validate();
++            phase.NewPointTheorems?.Validate();
+             if (!double.IsFinite(phase.TargetRatio) || phase.TargetRatio < 0 ||
+                 (phase.TargetDensity.HasValue && (!double.IsFinite(phase.TargetDensity.Value) || phase.TargetDensity < 0)) ||
+                 !double.IsFinite(phase.DensityWeight) || phase.DensityWeight < 0 ||
+@@ -73,6 +87,7 @@
+                 !double.IsFinite(phase.NewPointTarget) || phase.NewPointTarget < 0 ||
+                 !double.IsFinite(phase.NewPointScale) || phase.NewPointScale <= 0)
+                 throw new ArgumentException("Invalid theorem search phase");
++        }
+     }
+ 
+     public TheoremSearchPhase Phase(int depth) => Phases[Math.Min(Math.Max(depth - 1, 0), Phases.Length - 1)];
+@@ -80,6 +95,9 @@
+ 
+ public sealed class TheoremSearchPhase
+ {
++    public TheoremCountRange TheoremsPerPoint { get; set; }
++    public TheoremCountRange NewPointTheorems { get; set; }
++    public bool HasCountTargets => TheoremsPerPoint != null || NewPointTheorems != null;
+     public double TargetRatio { get; set; } = 1;
+     public double? TargetDensity { get; set; }
+     public double DensityWeight { get; set; } = 1;
+@@ -87,3 +105,18 @@
+     public double NewPointTarget { get; set; } = 1;
+     public double NewPointScale { get; set; } = 4;
+ }
++
++public sealed class TheoremCountRange
++{
++    public double? Min { get; set; }
++    public double? Max { get; set; }
++    public bool Contains(double value) => (!Min.HasValue || value >= Min.Value) && (!Max.HasValue || value <= Max.Value);
++    public void Validate()
++    {
++        if ((!Min.HasValue && !Max.HasValue) ||
++            (Min.HasValue && (!double.IsFinite(Min.Value) || Min.Value < 0)) ||
++            (Max.HasValue && (!double.IsFinite(Max.Value) || Max.Value < 0)) ||
++            (Min.HasValue && Max.HasValue && Min.Value > Max.Value))
++            throw new ArgumentException("A theorem count range requires nonnegative min/max, with min <= max");
++    }
++}
+diff --git a/Source/Library/GeoGen.ProblemGenerator/TheoremSearchMetrics.cs b/Source/Library/GeoGen.ProblemGenerator/TheoremSearchMetrics.cs
+--- a/Source/Library/GeoGen.ProblemGenerator/TheoremSearchMetrics.cs
++++ b/Source/Library/GeoGen.ProblemGenerator/TheoremSearchMetrics.cs
+@@ -8,6 +8,7 @@
+     public int Points { get; private set; }
+     public int RawTheorems { get; private set; }
+     public double WeightedTheorems { get; private set; }
++    public double TotalTheoremWeight { get; private set; }
+     public double Density { get; private set; }
+     public double NewPointDegree { get; private set; }
+     public double NewPointOuterDegree { get; private set; }
+@@ -55,6 +56,7 @@
+             foreach (var obj in theorem.GetInnerConfigurationObjects()) mask |= masks[obj];
+             var weight = settings.TypeWeights.TryGetValue(theorem.Type, out var configured) ? configured : 1;
+             if (settings.LocalTheoremWeight != 1 && IsLocal(theorem)) weight *= settings.LocalTheoremWeight;
++            result.TotalTheoremWeight += weight;
+             if ((mask & countScope) != 0) result.WeightedTheorems += weight;
+             if ((mask & lastMask) != 0)
+             {
+diff --git a/Source/Launchers/GeoGen.MainLauncher/BusinessLogic/ProblemGenerationRunner/ProblemGenerationRunner.cs b/Source/Launchers/GeoGen.MainLauncher/BusinessLogic/ProblemGenerationRunner/ProblemGenerationRunner.cs
+--- a/Source/Launchers/GeoGen.MainLauncher/BusinessLogic/ProblemGenerationRunner/ProblemGenerationRunner.cs
++++ b/Source/Launchers/GeoGen.MainLauncher/BusinessLogic/ProblemGenerationRunner/ProblemGenerationRunner.cs
+@@ -96,6 +96,8 @@
+         public void Run(LoadedProblemGeneratorInput input)
+         {
+             var streamSequence = 0L;
++            // Reference collection measures generation only and deliberately emits no problems.
++            var calibrationOnly = Environment.GetEnvironmentVariable("GEOGEN_CALIBRATION_ONLY") == "1";
+             if (_settings.StreamingOutputFolder != null)
+                 Directory.CreateDirectory(_settings.StreamingOutputFolder);
+ 
+@@ -256,6 +258,8 @@
+                 }
+ 
+                 #endregion
++
++                if (calibrationOnly) continue;
+ 
+                 // Skip configurations without theorems
+                 if (generatorOutput.NewTheorems.AllObjects.Count == 0)
+diff --git a/Source/Library/GeoGen.ProblemGenerator/SoftTheoremBias.cs b/Source/Library/GeoGen.ProblemGenerator/SoftTheoremBias.cs
+new file mode 100644
+--- /dev/null
++++ b/Source/Library/GeoGen.ProblemGenerator/SoftTheoremBias.cs
+@@ -0,0 +1,187 @@
++using System.Diagnostics;
++using System.Text.Json;
++using GeoGen.ConfigurationGenerator;
++using GeoGen.Core;
++
++namespace GeoGen.ProblemGenerator;
++
++/// <summary>Optional rejection inside the ORIGINAL configuration verifier. No sibling batching or ranking.</summary>
++public sealed class SoftTheoremBias : IDisposable
++{
++    public sealed record Checkpoint(int Points, int Stage);
++    public sealed record Observation(Checkpoint Next, int Depth, int NewPoints, double TheoremsPerPoint,
++        double NewPointTheorems, bool InsideTargets, bool Final = false);
++    private sealed class Histogram
++    {
++        public readonly Dictionary<double, long> Values = new();
++        public void Add(double value) => Values[value] = Values.GetValueOrDefault(value) + 1;
++        public object Export() => Values.OrderBy(x => x.Key).Select(x => new[] { x.Key, (double)x.Value }).ToArray();
++    }
++    private sealed class StageReference
++    {
++        public long Samples;
++        public readonly Histogram Density = new(), NewDegree = new();
++        public readonly Dictionary<string, long> FirstOperations = new();
++    }
++    private readonly TheoremSearchSettings _settings;
++    private readonly ProblemGeneratorInput _input;
++    private readonly Stopwatch _clock = Stopwatch.StartNew();
++    private readonly Random _random;
++    private readonly StreamWriter _trace;
++    private readonly Dictionary<int, StageReference> _reference = new();
++    private readonly StageReference _finalReference = new();
++    private bool _disposed;
++    private Observation _lastObservation;
++    public long Candidates { get; private set; }
++    public long OutsideReferenceStratum { get; private set; }
++    public long SymmetryPrunedBeforeDrawing { get; private set; }
++    public long DrawingAttempts { get; private set; }
++    public long InvalidDrawings { get; private set; }
++    public long FinderCalls { get; private set; }
++    public long MetricsEvaluated { get; private set; }
++    public long Checkpoints { get; private set; }
++    public long IncompleteSymmetryPreserved { get; private set; }
++    public long OutsideTargets { get; private set; }
++    public long RejectedByBias { get; private set; }
++    public long Outputs { get; private set; }
++    public double FinderMs { get; private set; }
++    public double MetricsMs { get; private set; }
++    public bool Active => _settings.KeepOutsideTargetsPercent < 100 && (_settings.Phases.Any(p => p.HasCountTargets) || _settings.Final?.HasCountTargets == true);
++    public bool NeedsMetrics => Active || _settings.CollectReference;
++    public bool ShouldStop => _clock.Elapsed.TotalSeconds >= _settings.Seconds || FinderCalls >= _settings.MaxEvaluated;
++
++    public SoftTheoremBias(TheoremSearchSettings settings, ProblemGeneratorInput input, int pictures)
++    {
++        settings.Validate(); _settings = settings; _input = input; _random = new Random(settings.Seed);
++        if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("GEOGEN_RELATION_WORKER")))
++            throw new ArgumentException("Cannot combine original soft search with Python sampling");
++        if (settings.TraceFile != null)
++        {
++            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(settings.TraceFile))!);
++            _trace = new StreamWriter(settings.TraceFile) { AutoFlush = true };
++        }
++        Write(new { kind = "start", policy = "soft", originalGenerator = true,
++            symmetryMode = input.SymmetryGenerationMode.ToString(), pictures,
++            settings.KeepOutsideTargetsPercent, settings.CollectReference,
++            phases = settings.Phases, final = settings.Final, needsMetrics = NeedsMetrics });
++    }
++
++    public void BeforeCandidate()
++    {
++        if (ShouldStop) throw new SoftSearchDeadlineException();
++        Candidates++;
++    }
++    public bool AllowsRoot(GeneratedConfiguration configuration)
++    {
++        if (_settings.ReferenceRootConstruction == null || configuration.IterationIndex != 1 ||
++            configuration.LastConstructedObject.Construction.Name == _settings.ReferenceRootConstruction) return true;
++        OutsideReferenceStratum++; return false;
++    }
++    public void SymmetryPruned() => SymmetryPrunedBeforeDrawing++;
++    public void BeforeDrawing() => DrawingAttempts++;
++    public void InvalidDrawing() => InvalidDrawings++;
++    public void FoundTheorems(double elapsedMs) { FinderCalls++; FinderMs += elapsedMs; }
++    public void Output() => Outputs++;
++    public void Incomplete() => IncompleteSymmetryPreserved++;
++
++    public bool IsCheckpoint(GeneratedConfiguration configuration) => _input.SymmetryGenerationMode switch
++    {
++        SymmetryGenerationMode.GenerateBothSymmetricAndAsymmetric => true,
++        SymmetryGenerationMode.GenerateOnlySymmetric => configuration.IsSymmetric(),
++        SymmetryGenerationMode.GenerateOnlyFullySymmetric => configuration.IsFullySymmetric(),
++        _ => throw new ArgumentException("Unknown symmetry mode")
++    };
++
++    public Observation Observe(GeneratedConfiguration configuration, TheoremMap allTheorems, Checkpoint previous)
++    {
++        var began = Stopwatch.GetTimestamp();
++        var metrics = TheoremSearchMetrics.Measure(configuration, allTheorems.AllObjects, _settings);
++        var count = metrics.Points - previous.Points;
++        var newDegree = count == 0 ? 0 : metrics.Degrees.Skip(previous.Points).Average();
++        // These user-visible counts always mean raw weighted T/N, not the former T/N^p objective.
++        var density = metrics.TotalTheoremWeight / Math.Max(1, metrics.Points);
++        var stage = previous.Stage + 1;
++        var terminal = configuration.IterationIndex == _input.NumberOfIterations ||
++            _input.Constructions.All(c => configuration.ObjectMap.GetObjectsForKeys(c.OutputType).Count() -
++                _input.InitialConfiguration.ObjectMap.GetObjectsForKeys(c.OutputType).Count() >= _input.MaximalNumbersOfObjectsToAdd[c.OutputType]);
++        var phase = terminal && _settings.Final != null ? _settings.Final : _settings.Phase(stage);
++        var inside = (phase.TheoremsPerPoint?.Contains(density) ?? true) &&
++            (count == 0 || (phase.NewPointTheorems?.Contains(newDegree) ?? true));
++        MetricsEvaluated++; Checkpoints++; MetricsMs += Stopwatch.GetElapsedTime(began).TotalMilliseconds;
++        var observation = new Observation(new Checkpoint(metrics.Points, stage), configuration.IterationIndex,
++            count, density, newDegree, inside, terminal);
++        if (_settings.CollectReference)
++        {
++            if (!_reference.TryGetValue(stage, out var reference)) _reference[stage] = reference = new StageReference();
++            var operation = configuration.ConstructedObjects[_input.InitialConfiguration.ConstructedObjects.Count].Construction.Name;
++            void Add(StageReference sample)
++            {
++                sample.Samples++; sample.Density.Add(density);
++                if (count > 0) sample.NewDegree.Add(newDegree);
++                sample.FirstOperations[operation] = sample.FirstOperations.GetValueOrDefault(operation) + 1;
++            }
++            Add(reference);
++            if (terminal) Add(_finalReference);
++        }
++        _lastObservation = observation;
++        return observation;
++    }
++
++    public bool Keep(Observation observation)
++    {
++        if (observation.InsideTargets) return true;
++        OutsideTargets++;
++        if (!Active || _random.NextDouble() * 100 < _settings.KeepOutsideTargetsPercent) return true;
++        RejectedByBias++;
++        if (RejectedByBias <= 3 || RejectedByBias % _settings.LogEveryExpanded == 0)
++            Write(new { kind = "rejected", seconds = _clock.Elapsed.TotalSeconds, observation });
++        return false;
++    }
++
++    public IEnumerable<ProblemGeneratorOutput> Track(IEnumerable<ProblemGeneratorOutput> source)
++    {
++        using var enumerator = source.GetEnumerator();
++        try
++        {
++            while (!ShouldStop)
++            {
++                bool next;
++                try { next = enumerator.MoveNext(); }
++                catch (SoftSearchDeadlineException) { break; }
++                if (!next) break;
++                Output();
++                if (Outputs % _settings.LogEveryExpanded == 0)
++                    Write(new { kind = "progress", seconds = _clock.Elapsed.TotalSeconds, counters = Counters(), lastObservation = _lastObservation });
++                yield return enumerator.Current;
++            }
++        }
++        finally { Dispose(); }
++    }
++
++    private object Counters() => new { Candidates, OutsideReferenceStratum, SymmetryPrunedBeforeDrawing, DrawingAttempts, InvalidDrawings,
++        FinderCalls, FinderMs, MetricsEvaluated, MetricsMs, Checkpoints, IncompleteSymmetryPreserved,
++        OutsideTargets, RejectedByBias, Outputs };
++    private void Write(object record) => _trace?.WriteLine(JsonSerializer.Serialize(record, TheoremSearchSettings.JsonOptions));
++    public void Dispose()
++    {
++        if (_disposed) return; _disposed = true;
++        Write(new { kind = "finish", seconds = _clock.Elapsed.TotalSeconds, counters = Counters(),
++            originalGenerator = true, cpuMs = Process.GetCurrentProcess().TotalProcessorTime.TotalMilliseconds,
++            peakWorkingSet = Process.GetCurrentProcess().PeakWorkingSet64 });
++        _trace?.Dispose();
++        if (_settings.CollectReference && _settings.ReferenceFile != null)
++        {
++            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(_settings.ReferenceFile))!);
++            var data = new { version = 1, unbiased = !Active, originalGenerator = true,
++                rootConstruction = _settings.ReferenceRootConstruction, symmetryMode = _input.SymmetryGenerationMode.ToString(), seconds = _clock.Elapsed.TotalSeconds,
++                counters = Counters(), final = new { samples = _finalReference.Samples,
++                    densityHistogram = _finalReference.Density.Export(), newPointHistogram = _finalReference.NewDegree.Export(),
++                    firstOperations = _finalReference.FirstOperations }, stages = _reference.OrderBy(x => x.Key).Select(x => new {
++                    stage = x.Key, samples = x.Value.Samples, densityHistogram = x.Value.Density.Export(),
++                    newPointHistogram = x.Value.NewDegree.Export(), firstOperations = x.Value.FirstOperations }) };
++            File.WriteAllText(_settings.ReferenceFile, JsonSerializer.Serialize(data, TheoremSearchSettings.JsonOptions));
++        }
++    }
++}
++
++internal sealed class SoftSearchDeadlineException : Exception { }
+diff --git a/Source/Tests/UnitTests/GeoGen.ConfigurationGenerator.Tests/SoftSearchTest.cs b/Source/Tests/UnitTests/GeoGen.ConfigurationGenerator.Tests/SoftSearchTest.cs
+new file mode 100644
+--- /dev/null
++++ b/Source/Tests/UnitTests/GeoGen.ConfigurationGenerator.Tests/SoftSearchTest.cs
+@@ -0,0 +1,195 @@
++using IAnalyticObject = GeoGen.AnalyticGeometry.IAnalyticObject;
++using GeoGen.Core;
++using GeoGen.Constructor;
++using GeoGen.Infrastructure;
++using GeoGen.ProblemGenerator;
++using GeoGen.TheoremFinder;
++using GeoGen.Utilities;
++using Ninject;
++using NUnit.Framework;
++using System.Text.Json;
++using static GeoGen.Core.ConfigurationObjectType;
++using static GeoGen.Core.PredefinedConstructions;
++
++namespace GeoGen.ConfigurationGenerator.Tests;
++
++[TestFixture]
++public class SoftSearchTest
++{
++    private sealed class CountingConstructor : IGeometryConstructor
++    {
++        private readonly IGeometryConstructor _inner;
++        public int Clones, Roots;
++        public CountingConstructor(IGeometryConstructor inner) => _inner = inner;
++        public (PicturesOfConfiguration pictures, ConstructionData data) Construct(Configuration c, int count, Func<IAnalyticObject[]> draw)
++        {
++            Roots++; var i = 0;
++            return _inner.Construct(c, count, () => { var j = i++; return new IAnalyticObject[] {
++                new GeoGen.AnalyticGeometry.Point(0,0),new GeoGen.AnalyticGeometry.Point(1,0),
++                new GeoGen.AnalyticGeometry.Point(.28+.13*j,.8+.17*j) }; });
++        }
++        public (PicturesOfConfiguration pictures, ConstructionData data) ConstructByCloning(PicturesOfConfiguration p, Configuration c)
++        { Clones++; return _inner.ConstructByCloning(p,c); }
++        public ConstructionData Construct(Pictures p, ConstructedConfigurationObject obj, bool add) => _inner.Construct(p,obj,add);
++        public IAnalyticObject Construct(Picture p, ConstructedConfigurationObject obj, bool add) => _inner.Construct(p,obj,add);
++    }
++    private sealed class CountingFinder : ITheoremFinder
++    {
++        private readonly ITheoremFinder _inner;
++        public int Initial, Updates;
++        public CountingFinder(ITheoremFinder inner) => _inner=inner;
++        public TheoremMap FindAllTheorems(ContextualPicture p) { Initial++;return _inner.FindAllTheorems(p); }
++        public TheoremMap FindNewTheorems(ContextualPicture p,TheoremMap old,out Theorem[] invalid)
++        { Updates++;return _inner.FindNewTheorems(p,old,out invalid); }
++    }
++    private static (GeoGen.ProblemGenerator.ProblemGenerator generator, CountingConstructor constructor, CountingFinder finder, IKernel kernel) Services()
++    {
++        var kernel=NinjectUtilities.CreateKernel();kernel.AddConstructor();
++        kernel.AddTheoremFinder(new TheoremFindingSettings(new[]{TheoremType.CollinearPoints,TheoremType.ConcyclicPoints,
++            TheoremType.PerpendicularLines,TheoremType.ParallelLines,TheoremType.EqualLineSegments},null,null));
++        kernel.AddConfigurationGenerator(new GenerationSettings(ConfigurationFilterType.MemoryEfficient));
++        var constructor=new CountingConstructor(kernel.Get<IGeometryConstructor>());var finder=new CountingFinder(kernel.Get<ITheoremFinder>());
++        var generator=new GeoGen.ProblemGenerator.ProblemGenerator(new ProblemGeneratorSettings(3),kernel.Get<IConfigurationGenerator>(),constructor,finder,new EmptyGeometryFailureTracer());
++        return (generator,constructor,finder,kernel);
++    }
++    private static ProblemGeneratorInput Input(SymmetryGenerationMode mode,int iterations=3,bool midpointOnly=false,bool hidden=false)
++    {
++        var a=new LooseConfigurationObject(Point);var b=new LooseConfigurationObject(Point);var c=new LooseConfigurationObject(Point);
++        var config=Configuration.DeriveFromObjects(LooseObjectLayout.Triangle,a,b,c);
++        return new ProblemGeneratorInput(config,(midpointOnly?new Construction[]{Midpoint}:new Construction[]{Midpoint,ComposedConstructions.Orthocenter}).ToReadOnlyHashSet(),iterations,
++            new Dictionary<ConfigurationObjectType,int>{{Point,iterations},{Line,0},{Circle,0}},mode,hidden?new[]{a}:Array.Empty<ConfigurationObject>());
++    }
++    private static string Snapshot(ProblemGeneratorOutput output)
++    {
++        var f=new OutputFormatter(output.Configuration.AllObjects);
++        return f.FormatConfiguration(output.Configuration)+"\n"+string.Join("\n",output.OldTheorems.AllObjects.Concat(output.NewTheorems.AllObjects).Select(f.FormatTheorem).OrderBy(x=>x));
++    }
++    [TestCase(SymmetryGenerationMode.GenerateBothSymmetricAndAsymmetric)]
++    [TestCase(SymmetryGenerationMode.GenerateOnlySymmetric)]
++    [TestCase(SymmetryGenerationMode.GenerateOnlyFullySymmetric)]
++    public void Hundred_percent_preserves_original_order_theorems_and_work(SymmetryGenerationMode mode)
++    {
++        var (generator,constructor,finder,kernel)=Services();using(kernel)
++        {
++            var input=Input(mode);var expected=generator.GenerateStandard(input).generationOutputs.Select(Snapshot).ToArray();
++            var work=(constructor.Roots,constructor.Clones,finder.Initial,finder.Updates);
++            constructor.Roots=constructor.Clones=finder.Initial=finder.Updates=0;
++            var path=Path.GetTempFileName();
++            try
++            {
++                var policy=new TheoremSearchSettings{Policy="soft",KeepOutsideTargetsPercent=100,TraceFile=path,
++                    Phases=new[]{new TheoremSearchPhase{TheoremsPerPoint=new(){Min=100000}}}};
++                var actual=generator.GenerateStandard(input,policy).generationOutputs.Select(Snapshot).ToArray();
++                Assert.That(actual,Is.EqualTo(expected));Assert.That((constructor.Roots,constructor.Clones,finder.Initial,finder.Updates),Is.EqualTo(work));
++                using var last=JsonDocument.Parse(File.ReadAllLines(path).Last());
++                Assert.That(last.RootElement.GetProperty("counters").GetProperty("MetricsEvaluated").GetInt64(),Is.Zero);
++            }
++            finally{File.Delete(path);}
++        }
++    }
++    [Test]
++    public void Reference_collection_does_not_change_original_output_or_duplicate_finder_calls()
++    {
++        var (generator,constructor,finder,kernel)=Services();using(kernel)
++        {
++            var input=Input(SymmetryGenerationMode.GenerateOnlyFullySymmetric,3,midpointOnly:true);
++            var expected=generator.GenerateStandard(input).generationOutputs.Select(Snapshot).ToArray();
++            var updates=finder.Updates;var clones=constructor.Clones;
++            finder.Updates=constructor.Clones=0;
++            var actual=generator.GenerateStandard(input,new TheoremSearchSettings{Policy="soft",CollectReference=true}).generationOutputs.Select(Snapshot).ToArray();
++            Assert.That(actual,Is.EqualTo(expected));Assert.That(finder.Updates,Is.EqualTo(updates));Assert.That(constructor.Clones,Is.EqualTo(clones));
++        }
++    }
++    [Test]
++    public void Rejected_parent_is_not_expanded()
++    {
++        var (generator,constructor,finder,kernel)=Services();using(kernel)
++        {
++            generator.GenerateStandard(Input(SymmetryGenerationMode.GenerateBothSymmetricAndAsymmetric,1)).generationOutputs.ToArray();
++            var oneLevel=constructor.Clones;constructor.Clones=0;
++            var policy=new TheoremSearchSettings{Policy="soft",KeepOutsideTargetsPercent=0,
++                Phases=new[]{new TheoremSearchPhase{TheoremsPerPoint=new(){Min=100000}}}};
++            Assert.That(generator.GenerateStandard(Input(SymmetryGenerationMode.GenerateBothSymmetricAndAsymmetric,3),policy).generationOutputs.ToArray(),Is.Empty);
++            Assert.That(constructor.Clones,Is.EqualTo(oneLevel));
++        }
++    }
++    [Test]
++    public void Impossible_full_symmetry_is_pruned_before_drawing()
++    {
++        var (generator,constructor,finder,kernel)=Services();using(kernel)
++        {
++            var input=Input(SymmetryGenerationMode.GenerateOnlyFullySymmetric,2,midpointOnly:true);
++            var outputs=generator.GenerateStandard(input,new TheoremSearchSettings{Policy="soft"}).generationOutputs.ToArray();
++            Assert.That(outputs,Is.Empty);Assert.That(constructor.Clones,Is.Zero);Assert.That(finder.Updates,Is.Zero);
++        }
++    }
++    [Test]
++    public void Incomplete_full_symmetry_orbit_is_not_rejected_and_three_points_are_measured_together()
++    {
++        var (generator,constructor,finder,kernel)=Services();using(kernel)
++        {
++            var path=Path.GetTempFileName();var reference=Path.GetTempFileName();
++            try
++            {
++                var input=Input(SymmetryGenerationMode.GenerateOnlyFullySymmetric,3,midpointOnly:true);
++                var policy=new TheoremSearchSettings{Policy="soft",KeepOutsideTargetsPercent=0,TraceFile=path,CollectReference=true,ReferenceFile=reference,
++                    Phases=new[]{new TheoremSearchPhase{TheoremsPerPoint=new(){Min=100000}}}};
++                Assert.That(generator.GenerateStandard(input,policy).generationOutputs.ToArray(),Is.Empty);
++                using var last=JsonDocument.Parse(File.ReadAllLines(path).Last());var c=last.RootElement.GetProperty("counters");
++                Assert.That(c.GetProperty("IncompleteSymmetryPreserved").GetInt64(),Is.GreaterThan(0));
++                Assert.That(c.GetProperty("MetricsEvaluated").GetInt64(),Is.GreaterThan(0));
++                var rejection=File.ReadAllLines(path).Select(s=>JsonDocument.Parse(s)).First(d=>d.RootElement.GetProperty("kind").GetString()=="rejected");
++                using(rejection)Assert.That(rejection.RootElement.GetProperty("observation").GetProperty("NewPoints").GetInt32(),Is.EqualTo(3));
++            }
++            finally{File.Delete(path);File.Delete(reference);}
++        }
++    }
++    [Test]
++    public void Direct_count_target_changes_the_actual_generated_objects()
++    {
++        var (generator,constructor,finder,kernel)=Services();using(kernel)
++        {
++            var policy=new TheoremSearchSettings{Policy="soft",KeepOutsideTargetsPercent=0,
++                Phases=new[]{new TheoremSearchPhase{NewPointTheorems=new(){Min=1,Max=2}}}};
++            var outputs=generator.GenerateStandard(Input(SymmetryGenerationMode.GenerateBothSymmetricAndAsymmetric,1),policy).generationOutputs.ToArray();
++            Assert.That(outputs,Is.Not.Empty);
++            Assert.That(outputs.All(o=>o.Configuration.LastConstructedObject.Construction.Equals(Midpoint)),Is.True);
++            foreach(var output in outputs)
++                Assert.That(output.OldTheorems.AllObjects.Concat(output.NewTheorems.AllObjects).ToHashSet().SetEquals(finder.FindAllTheorems(output.ContextualPicture).AllObjects),Is.True);
++        }
++    }
++    [Test]
++    public void Final_target_applies_to_whole_orbit_even_if_it_is_the_first_checkpoint()
++    {
++        var (generator,constructor,finder,kernel)=Services();using(kernel)
++        {
++            var policy=new TheoremSearchSettings{Policy="soft",KeepOutsideTargetsPercent=0,
++                Phases=new[]{new TheoremSearchPhase{TheoremsPerPoint=new(){Min=100000}}},
++                Final=new TheoremSearchPhase{NewPointTheorems=new(){Min=1}}};
++            var outputs=generator.GenerateStandard(Input(SymmetryGenerationMode.GenerateOnlyFullySymmetric,3,midpointOnly:true),policy).generationOutputs.ToArray();
++            Assert.That(outputs,Is.Not.Empty);Assert.That(outputs.All(o=>o.Configuration.IterationIndex==3),Is.True);
++        }
++    }
++    [Test]
++    public void Fifty_percent_means_retaining_half_of_off_target_branches()
++    {
++        var policy=new TheoremSearchSettings{Policy="soft",KeepOutsideTargetsPercent=50,Phases=new[]{new TheoremSearchPhase{TheoremsPerPoint=new(){Max=0}}}};
++        using var bias=new SoftTheoremBias(policy,Input(SymmetryGenerationMode.GenerateBothSymmetricAndAsymmetric),3);
++        var observation=new SoftTheoremBias.Observation(new(4,1),1,1,3,4,false);
++        var kept=Enumerable.Range(0,10000).Count(_=>bias.Keep(observation));Assert.That(kept,Is.InRange(4700,5300));
++    }
++    [Test]
++    public void Zero_percent_without_targets_does_not_change_the_generator()
++    {
++        var (generator,constructor,finder,kernel)=Services();using(kernel)
++        {
++            var input=Input(SymmetryGenerationMode.GenerateBothSymmetricAndAsymmetric,1,hidden:true);
++            var normal=generator.GenerateStandard(input).generationOutputs.Select(Snapshot).ToArray();
++            var actual=generator.GenerateStandard(input,new TheoremSearchSettings{Policy="soft",KeepOutsideTargetsPercent=0}).generationOutputs.Select(Snapshot).ToArray();
++            Assert.That(actual,Is.EqualTo(normal));
++        }
++    }
++    [TestCase(-1,1)] [TestCase(3,2)]
++    public void Invalid_user_count_range_is_rejected(double min,double max)
++        =>Assert.Throws<ArgumentException>(()=>new TheoremCountRange{Min=min,Max=max}.Validate());
++}

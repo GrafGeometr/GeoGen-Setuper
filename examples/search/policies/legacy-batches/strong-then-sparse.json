@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "seed": 17,
+  "seconds": 600,
+  "proposals": 16,
+  "keep": 4,
+  "explorationSlots": 1,
+  "pictures": 4,
+  "policy": "density",
+  "scope": "all",
+  "pointExponent": 1,
+  "localTheoremWeight": 1,
+  "emitFromDepth": 2,
+  "requireNonLocalTheorem": false,
+  "phases": [
+    {
+      "targetRatio": 1.5
+    },
+    {
+      "targetRatio": 1.4
+    },
+    {
+      "targetRatio": 0.7,
+      "newPointWeight": 0.3,
+      "newPointTarget": 2
+    },
+    {
+      "targetRatio": 0.5,
+      "newPointWeight": 0.7,
+      "newPointTarget": 1
+    }
+  ]
+}

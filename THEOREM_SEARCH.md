@@ -1,3 +1,9 @@
+# Первый C#-прототип: архивное описание batch-режима
+
+Для рангового отбора см. [RANK_SEARCH.md](RANK_SEARCH.md), для порогового
+мягкого отбора — [SOFT_SEARCH.md](SOFT_SEARCH.md).
+Следующее описание относится к policy=density/uniform и сохранённым профилям legacy-batches.
+
 # Поиск по числу теорем: C#-прототип
 
 Этот режим сначала строит очередной объект, затем находит теоремы новой
@@ -25,7 +31,8 @@ bash build.sh build --output ./dist/geometry-suite-native --test
 Сборка использует прежний `.builder`; старый готовый комплект сохраняется.
 Если `dist/geometry-suite-native` уже существует, укажите другое новое имя.
 Не нужно отдельно обновлять форк GeoGen: сборщик получает закреплённые
-исходники и накладывает все 14 патчей, включая новое C#-ядро.
+исходники и накладывает текущие патчи сборщика. Первый batch-прототип
+поставлялся с 14 патчами; текущая версия включает 16.
 
 Первичная установка:
 
@@ -41,7 +48,7 @@ bash build.sh build --output ./dist/geometry-suite-native --test
 ```bash
 ./dist/geometry-suite-native/geometry-suite run \
   ./examples/search/stories/centers.txt \
-  --search-config ./examples/search/policies/balanced.json \
+  --search-config ./examples/search/policies/legacy-batches/balanced.json \
   --output ./runs/centers-native-001 --timeout 660 \
   --standard-checks --quality-checks --check-ms 2000 --view
 ```
@@ -200,7 +207,7 @@ TheoremFinder или прувера может выйти за бюджет; в�
 Сначала скопируйте профиль: файлы в examples можно обновить следующим pull.
 
 ```bash
-cp ./examples/search/policies/balanced.json ./search-my.json
+cp ./examples/search/policies/legacy-batches/balanced.json ./search-my.json
 ```
 
 1. **Размер порции.** Сравните proposals=8,16,32,64 при неизменных keep=4,

@@ -1,0 +1,672 @@
+diff --git a/Source/Library/GeoGen.ConfigurationGenerator/ConfigurationGenerator.cs b/Source/Library/GeoGen.ConfigurationGenerator/ConfigurationGenerator.cs
+--- a/Source/Library/GeoGen.ConfigurationGenerator/ConfigurationGenerator.cs
++++ b/Source/Library/GeoGen.ConfigurationGenerator/ConfigurationGenerator.cs
+@@ -113,7 +113,7 @@
+                 : new ConfigurationObjectMap(currentConfiguration.AllObjects.Where(obj => !input.HiddenPoints.Contains(obj)));
+ 
+             // For a given configuration we create all possible objects using the constructions from the input
+-            return input.Constructions.SelectMany(construction =>
++            var candidates = input.Constructions.SelectMany(construction =>
+             {
+                 // First we check if we have enough object to match the signature
+                 if (!construction.Signature.CanBeMatched(availableObjects))
+@@ -170,8 +170,10 @@
+             // Add the object to the current configuration
+             .Select(newObject => new GeneratedConfiguration(currentConfiguration, newObject, currentConfiguration.IterationIndex + 1))
+             // Check the configuration by the filter
+-            .Where(configuration => !filter.ShouldBeExcluded(configuration))
+-            // Apply the custom configuration filter
++            .Where(configuration => !filter.ShouldBeExcluded(configuration));
++
++            // Selection only sees immutable parent snapshots; the verifier remains streaming.
++            return (input.CandidateSelector == null ? candidates : input.CandidateSelector(currentConfiguration, candidates))
+             .Where(input.ConfigurationFilter.Invoke)
+             // Finally get the enumerator
+             .GetEnumerator();
+diff --git a/Source/Library/GeoGen.ConfigurationGenerator/ConfigurationGeneratorInput.cs b/Source/Library/GeoGen.ConfigurationGenerator/ConfigurationGeneratorInput.cs
+--- a/Source/Library/GeoGen.ConfigurationGenerator/ConfigurationGeneratorInput.cs
++++ b/Source/Library/GeoGen.ConfigurationGenerator/ConfigurationGeneratorInput.cs
+@@ -36,6 +36,9 @@
+         /// </summary>
+         public Func<GeneratedConfiguration, bool> ConfigurationFilter { get; }
+ 
++        /// <summary>Optional per-parent selection of canonical siblings before the stateful verifier.</summary>
++        public Func<GeneratedConfiguration, IEnumerable<GeneratedConfiguration>, IEnumerable<GeneratedConfiguration>> CandidateSelector { get; }
++
+         /// <summary>
+         /// Initial points excluded from arguments of newly generated constructions.
+         /// They remain available to initial definitions and theorem finding.
+@@ -60,7 +63,8 @@
+                                            int numberOfIterations,
+                                            IReadOnlyDictionary<ConfigurationObjectType, int> maximalNumbersOfObjectsToAdd,
+                                            Func<GeneratedConfiguration, bool> configurationFilter,
+-                                           IEnumerable<ConfigurationObject> hiddenPoints = null)
++                                           IEnumerable<ConfigurationObject> hiddenPoints = null,
++                                           Func<GeneratedConfiguration, IEnumerable<GeneratedConfiguration>, IEnumerable<GeneratedConfiguration>> candidateSelector = null)
+         {
+             InitialConfiguration = initialConfiguration ?? throw new ArgumentNullException(nameof(initialConfiguration));
+             HiddenPoints = (hiddenPoints ?? Enumerable.Empty<ConfigurationObject>()).ToReadOnlyHashSet();
+@@ -69,6 +73,7 @@
+             Constructions = constructions ?? throw new ArgumentNullException(nameof(constructions));
+             NumberOfIterations = numberOfIterations;
+             MaximalNumbersOfObjectsToAdd = maximalNumbersOfObjectsToAdd ?? throw new ArgumentNullException(nameof(maximalNumbersOfObjectsToAdd));
++            CandidateSelector = candidateSelector;
+             ConfigurationFilter = configurationFilter ?? throw new ArgumentNullException(nameof(configurationFilter));
+         }
+ 
+diff --git a/Source/Library/GeoGen.ProblemGenerator/ProblemGenerator.cs b/Source/Library/GeoGen.ProblemGenerator/ProblemGenerator.cs
+--- a/Source/Library/GeoGen.ProblemGenerator/ProblemGenerator.cs
++++ b/Source/Library/GeoGen.ProblemGenerator/ProblemGenerator.cs
+@@ -146,6 +146,7 @@
+             theoremMapCache.Push(initialTheorems);
+ 
+             var bias = policy == null ? null : new SoftTheoremBias(policy, input, _settings.NumberOfPictures);
++            var ranker = policy?.HasRankSelection == true ? new ExactRankSelector(policy, input, _constructor, _finder, bias) : null;
+             var checkpoints = bias?.NeedsMetrics == true ? new Stack<SoftTheoremBias.Checkpoint>() : null;
+             checkpoints?.Push(new SoftTheoremBias.Checkpoint(
+                 input.InitialConfiguration.ObjectMap.GetObjectsForKeys(ConfigurationObjectType.Point).Count(), 0));
+@@ -188,69 +189,7 @@
+ 
+                 #region Exclusion based on symmetry
+ 
+-                // Find out if we should exclude this configuration because of symmetry
+-                // That can happen only if we are told to do so...
+-                var excludeBecauseOfSymmetry = input.SymmetryGenerationMode != SymmetryGenerationMode.GenerateBothSymmetricAndAsymmetric &&
+-                    // And it is not true that we can generate some objects that would make this configuration symmetric
+-                    // To find all options that would do so, we need to distinguish the symmetry mode
+-                    !(input.SymmetryGenerationMode switch
+-                    {
+-                        // Standard symmetry yields a list of options (i.e. object lists)
+-                        SymmetryGenerationMode.GenerateOnlySymmetric => configuration.GetObjectsThatWouldMakeThisConfigurationSymmetric(),
+-
+-                        // Full symmetry yields only one object list
+-                        SymmetryGenerationMode.GenerateOnlyFullySymmetric => configuration.GetObjectsThatWouldMakeThisConfigurationFullySymmetric().ToEnumerable(),
+-
+-                        // Unhandled cases
+-                        _ => throw new GeoGenException($"Unhandled value of {nameof(SymmetryGenerationMode)}: {input.SymmetryGenerationMode}"),
+-                    })
+-                    // Find out if given objects to be added could really be added
+-                    .Any(objectsToBeAdded =>
+-                    {
+-                        // A symmetric completion requiring a hidden point as a direct argument is unreachable.
+-                        if (objectsToBeAdded.Any(obj => obj.PassedArguments.FlattenedList.Any(input.HiddenPoints.Contains)))
+-                            return false;
+-
+-                        // If we don't have enough iterations to add that many objects, then we're done
+-                        if (configuration.IterationIndex + objectsToBeAdded.Count > input.NumberOfIterations)
+-                            return false;
+-
+-                        // Otherwise find out if we have the needed constructions by taking the objects
+-                        var doWeHaveNeededConstructions = objectsToBeAdded
+-                            // Their constructions
+-                            .Select(objectToBeAdded => objectToBeAdded.Construction)
+-                            // All of them must be among the ones we're using to extend objects
+-                            .All(input.Constructions.Contains);
+-
+-                        // If we don't have the needed constructions, these objects can't be generated
+-                        if (!doWeHaveNeededConstructions)
+-                            return false;
+-
+-                        // Otherwise categorize objects to be added by taking them
+-                        return objectsToBeAdded
+-                            // Grouping by their type
+-                            .GroupBy(objectToBeAdded => objectToBeAdded.ObjectType)
+-                            // It needs to be true that we can add that many objects from every type
+-                            .All(group =>
+-                            {
+-                                // Get the type
+-                                var type = group.Key;
+-
+-                                // Get the needed count 
+-                                var neededObjectsOfThisTypeCount = group.Count();
+-
+-                                // Get the number of already added objects of this type by taking all objects of this type
+-                                var addedObjectsOfThisTypeCount = configuration.ObjectMap.GetObjectsForKeys(type).Count()
+-                                    // And subtracting objects of this type from the initial configuration
+-                                    - input.InitialConfiguration.ObjectMap.GetObjectsForKeys(type).Count();
+-
+-                                // We can add these objects if and only if we will not exceed the maximal number of objects to add
+-                                return neededObjectsOfThisTypeCount + addedObjectsOfThisTypeCount <= input.MaximalNumbersOfObjectsToAdd[type];
+-                            });
+-                    });
+-
+-                // If we should exclude this configuration because of symmetry, do it
+-                if (excludeBecauseOfSymmetry)
++                if (!SymmetryReachability.CanComplete(configuration, input))
+                 {
+                     bias?.SymmetryPruned();
+                     return false;
+@@ -358,7 +297,9 @@
+ 
+                 // As a filter pass our verification that draws the configuration geometrically
+                 configurationFilter: VerifyConfigurationCorrectness,
+-                hiddenPoints: input.HiddenPoints
++                hiddenPoints: input.HiddenPoints,
++                candidateSelector: ranker == null ? null : (parent, siblings) =>
++                    ranker.Select(parent, siblings, picturesCache.Peek(), contextualPictureCache.Peek(), theoremMapCache.Peek())
+             );
+ 
+             // Return the tuple of initial theorems and a lazy algorithm enumerable
+diff --git a/Source/Library/GeoGen.ProblemGenerator/TheoremSearchSettings.cs b/Source/Library/GeoGen.ProblemGenerator/TheoremSearchSettings.cs
+--- a/Source/Library/GeoGen.ProblemGenerator/TheoremSearchSettings.cs
++++ b/Source/Library/GeoGen.ProblemGenerator/TheoremSearchSettings.cs
+@@ -30,6 +30,9 @@
+     public double PointOffset { get; set; } = 0;
+     public double LocalTheoremWeight { get; set; } = 1;
+     public Dictionary<TheoremType, double> TypeWeights { get; set; } = new();
++    public RankInterval[] RankIntervals { get; set; } = Array.Empty<RankInterval>();
++    public RankInterval FinalRankInterval { get; set; }
++    public bool HasRankSelection => RankIntervals.Any(r => !r.IsIdentity) || FinalRankInterval?.IsIdentity == false;
+     public TheoremSearchPhase Final { get; set; }
+     public TheoremSearchPhase[] Phases { get; set; } = new[] { new TheoremSearchPhase() };
+     public int EmitFromDepth { get; set; } = 1;
+@@ -74,6 +77,11 @@
+             throw new ArgumentException("Invalid theorem search settings");
+         if (!double.IsFinite(KeepOutsideTargetsPercent) || KeepOutsideTargetsPercent < 0 || KeepOutsideTargetsPercent > 100)
+             throw new ArgumentException("keepOutsideTargetsPercent must be between 0 and 100");
++        if (RankIntervals == null || RankIntervals.Any(r => r == null))
++            throw new ArgumentException("RankIntervals cannot contain null");
++        foreach (var interval in FinalRankInterval == null ? RankIntervals : RankIntervals.Concat(new[] { FinalRankInterval })) interval.Validate();
++        if ((RankIntervals.Length > 0 || FinalRankInterval != null) && Policy != "soft")
++            throw new ArgumentException("Rank intervals require policy=soft");
+         if (ReferenceRootConstruction != null && !CollectReference)
+             throw new ArgumentException("ReferenceRootConstruction is only available for reference collection");
+         foreach (var phase in Final == null ? Phases : Phases.Concat(new[] { Final }))
+@@ -120,3 +128,20 @@
+             throw new ArgumentException("A theorem count range requires nonnegative min/max, with min <= max");
+     }
+ }
++
++/// <summary>Ascending numerical metric: 0 is the fewest theorems, 1 the most.</summary>
++public sealed class RankInterval
++{
++    public double From { get; set; } = 0;
++    public double To { get; set; } = 1;
++    public string Metric { get; set; } = "theoremsPerPoint";
++    public int MinimumNewTheorems { get; set; } = 0;
++    public bool IsIdentity => From == 0 && To == 1 && MinimumNewTheorems == 0;
++    public void Validate()
++    {
++        if (!double.IsFinite(From) || !double.IsFinite(To) || From < 0 || To > 1 || From >= To ||
++            MinimumNewTheorems < 0 || (Metric != "theoremsPerPoint" && Metric != "newPointTheorems"))
++            throw new ArgumentException("Rank interval requires 0 <= from < to <= 1 and a known metric");
++    }
++    public (int start, int end) Indices(int count) => ((int)Math.Floor(From * count), Math.Min(count, (int)Math.Ceiling(To * count)));
++}
+diff --git a/Source/Library/GeoGen.ProblemGenerator/SoftTheoremBias.cs b/Source/Library/GeoGen.ProblemGenerator/SoftTheoremBias.cs
+--- a/Source/Library/GeoGen.ProblemGenerator/SoftTheoremBias.cs
++++ b/Source/Library/GeoGen.ProblemGenerator/SoftTheoremBias.cs
+@@ -44,11 +44,22 @@
+     public long OutsideTargets { get; private set; }
+     public long RejectedByBias { get; private set; }
+     public long Outputs { get; private set; }
++    public long RankPools { get; private set; }
++    public long RankCompletedPools { get; private set; }
++    public long RankCandidates { get; private set; }
++    public long RankSymmetryPruned { get; private set; }
++    public long RankDrawingAttempts { get; private set; }
++    public long RankInvalidDrawings { get; private set; }
++    public long RankFinderCalls { get; private set; }
++    public long RankMetricsEvaluated { get; private set; }
++    public long RankSelected { get; private set; }
++    public long RankBelowMinimumNewTheorems { get; private set; }
++    public double RankingMs { get; private set; }
+     public double FinderMs { get; private set; }
+     public double MetricsMs { get; private set; }
+     public bool Active => _settings.KeepOutsideTargetsPercent < 100 && (_settings.Phases.Any(p => p.HasCountTargets) || _settings.Final?.HasCountTargets == true);
+     public bool NeedsMetrics => Active || _settings.CollectReference;
+-    public bool ShouldStop => _clock.Elapsed.TotalSeconds >= _settings.Seconds || FinderCalls >= _settings.MaxEvaluated;
++    public bool ShouldStop => _clock.Elapsed.TotalSeconds >= _settings.Seconds || FinderCalls + RankFinderCalls >= _settings.MaxEvaluated;
+ 
+     public SoftTheoremBias(TheoremSearchSettings settings, ProblemGeneratorInput input, int pictures)
+     {
+@@ -63,7 +74,7 @@
+         Write(new { kind = "start", policy = "soft", originalGenerator = true,
+             symmetryMode = input.SymmetryGenerationMode.ToString(), pictures,
+             settings.KeepOutsideTargetsPercent, settings.CollectReference,
+-            phases = settings.Phases, final = settings.Final, needsMetrics = NeedsMetrics });
++            phases = settings.Phases, final = settings.Final, rankIntervals = settings.RankIntervals, finalRankInterval = settings.FinalRankInterval, needsMetrics = NeedsMetrics });
+     }
+ 
+     public void BeforeCandidate()
+@@ -82,6 +93,23 @@
+     public void InvalidDrawing() => InvalidDrawings++;
+     public void FoundTheorems(double elapsedMs) { FinderCalls++; FinderMs += elapsedMs; }
+     public void Output() => Outputs++;
++    public void BeginRankPool(int depth, RankInterval interval)
++    { RankPools++; Write(new { kind="rank-pool-start", parentDepth=depth, interval }); }
++    public void BeforeRankCandidate()
++    { if (ShouldStop) throw new SoftSearchDeadlineException(); RankCandidates++; }
++    public void RankSymmetryRejected() => RankSymmetryPruned++;
++    public void RankBeforeDrawing() => RankDrawingAttempts++;
++    public void RankInvalid() => RankInvalidDrawings++;
++    public void RankFound() => RankFinderCalls++;
++    public void RankMeasured() => RankMetricsEvaluated++;
++    public void RankBelowMinimum() => RankBelowMinimumNewTheorems++;
++    public void EndRankPool(int depth, RankInterval interval, int count, int selected,
++        double milliseconds, bool complete, double? minimum, double? maximum)
++    {
++        RankingMs+=milliseconds; RankSelected+=selected; if(complete)RankCompletedPools++;
++        Write(new { kind="rank-pool-finish", parentDepth=depth, interval, count, selected, complete,
++            milliseconds, minimum, maximum, seconds=_clock.Elapsed.TotalSeconds });
++    }
+     public void Incomplete() => IncompleteSymmetryPreserved++;
+ 
+     public bool IsCheckpoint(GeneratedConfiguration configuration) => _input.SymmetryGenerationMode switch
+@@ -160,7 +188,9 @@
+ 
+     private object Counters() => new { Candidates, OutsideReferenceStratum, SymmetryPrunedBeforeDrawing, DrawingAttempts, InvalidDrawings,
+         FinderCalls, FinderMs, MetricsEvaluated, MetricsMs, Checkpoints, IncompleteSymmetryPreserved,
+-        OutsideTargets, RejectedByBias, Outputs };
++        OutsideTargets, RejectedByBias, Outputs, RankPools, RankCompletedPools, RankCandidates,
++        RankSymmetryPruned, RankDrawingAttempts, RankInvalidDrawings, RankFinderCalls,
++        RankMetricsEvaluated, RankSelected, RankBelowMinimumNewTheorems, RankingMs };
+     private void Write(object record) => _trace?.WriteLine(JsonSerializer.Serialize(record, TheoremSearchSettings.JsonOptions));
+     public void Dispose()
+     {
+@@ -172,7 +202,7 @@
+         if (_settings.CollectReference && _settings.ReferenceFile != null)
+         {
+             Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(_settings.ReferenceFile))!);
+-            var data = new { version = 1, unbiased = !Active, originalGenerator = true,
++            var data = new { version = 1, unbiased = !Active && !_settings.HasRankSelection, originalGenerator = true,
+                 rootConstruction = _settings.ReferenceRootConstruction, symmetryMode = _input.SymmetryGenerationMode.ToString(), seconds = _clock.Elapsed.TotalSeconds,
+                 counters = Counters(), final = new { samples = _finalReference.Samples,
+                     densityHistogram = _finalReference.Density.Export(), newPointHistogram = _finalReference.NewDegree.Export(),
+diff --git a/Source/Library/GeoGen.ProblemGenerator/TheoremSearchMetrics.cs b/Source/Library/GeoGen.ProblemGenerator/TheoremSearchMetrics.cs
+--- a/Source/Library/GeoGen.ProblemGenerator/TheoremSearchMetrics.cs
++++ b/Source/Library/GeoGen.ProblemGenerator/TheoremSearchMetrics.cs
+@@ -30,6 +30,7 @@
+                 if (pointCount == 63) throw new ArgumentException("Theorem search supports up to 63 named points");
+                 masks[obj] = 1UL << pointCount++;
+             }
++            else if (obj is LooseConfigurationObject) masks[obj] = 0;
+             else if (obj is ConstructedConfigurationObject constructed)
+             {
+                 ulong mask = 0;
+diff --git a/Source/Tests/UnitTests/GeoGen.ConfigurationGenerator.Tests/SoftSearchTest.cs b/Source/Tests/UnitTests/GeoGen.ConfigurationGenerator.Tests/SoftSearchTest.cs
+--- a/Source/Tests/UnitTests/GeoGen.ConfigurationGenerator.Tests/SoftSearchTest.cs
++++ b/Source/Tests/UnitTests/GeoGen.ConfigurationGenerator.Tests/SoftSearchTest.cs
+@@ -16,7 +16,7 @@
+ [TestFixture]
+ public class SoftSearchTest
+ {
+-    private sealed class CountingConstructor : IGeometryConstructor
++    internal sealed class CountingConstructor : IGeometryConstructor
+     {
+         private readonly IGeometryConstructor _inner;
+         public int Clones, Roots;
+@@ -33,7 +33,7 @@
+         public ConstructionData Construct(Pictures p, ConstructedConfigurationObject obj, bool add) => _inner.Construct(p,obj,add);
+         public IAnalyticObject Construct(Picture p, ConstructedConfigurationObject obj, bool add) => _inner.Construct(p,obj,add);
+     }
+-    private sealed class CountingFinder : ITheoremFinder
++    internal sealed class CountingFinder : ITheoremFinder
+     {
+         private readonly ITheoremFinder _inner;
+         public int Initial, Updates;
+@@ -42,24 +42,24 @@
+         public TheoremMap FindNewTheorems(ContextualPicture p,TheoremMap old,out Theorem[] invalid)
+         { Updates++;return _inner.FindNewTheorems(p,old,out invalid); }
+     }
+-    private static (GeoGen.ProblemGenerator.ProblemGenerator generator, CountingConstructor constructor, CountingFinder finder, IKernel kernel) Services()
++    internal static (GeoGen.ProblemGenerator.ProblemGenerator generator, CountingConstructor constructor, CountingFinder finder, IKernel kernel) Services(ConfigurationFilterType filterType=ConfigurationFilterType.MemoryEfficient)
+     {
+         var kernel=NinjectUtilities.CreateKernel();kernel.AddConstructor();
+         kernel.AddTheoremFinder(new TheoremFindingSettings(new[]{TheoremType.CollinearPoints,TheoremType.ConcyclicPoints,
+             TheoremType.PerpendicularLines,TheoremType.ParallelLines,TheoremType.EqualLineSegments},null,null));
+-        kernel.AddConfigurationGenerator(new GenerationSettings(ConfigurationFilterType.MemoryEfficient));
++        kernel.AddConfigurationGenerator(new GenerationSettings(filterType));
+         var constructor=new CountingConstructor(kernel.Get<IGeometryConstructor>());var finder=new CountingFinder(kernel.Get<ITheoremFinder>());
+         var generator=new GeoGen.ProblemGenerator.ProblemGenerator(new ProblemGeneratorSettings(3),kernel.Get<IConfigurationGenerator>(),constructor,finder,new EmptyGeometryFailureTracer());
+         return (generator,constructor,finder,kernel);
+     }
+-    private static ProblemGeneratorInput Input(SymmetryGenerationMode mode,int iterations=3,bool midpointOnly=false,bool hidden=false)
++    internal static ProblemGeneratorInput Input(SymmetryGenerationMode mode,int iterations=3,bool midpointOnly=false,bool hidden=false)
+     {
+         var a=new LooseConfigurationObject(Point);var b=new LooseConfigurationObject(Point);var c=new LooseConfigurationObject(Point);
+         var config=Configuration.DeriveFromObjects(LooseObjectLayout.Triangle,a,b,c);
+         return new ProblemGeneratorInput(config,(midpointOnly?new Construction[]{Midpoint}:new Construction[]{Midpoint,ComposedConstructions.Orthocenter}).ToReadOnlyHashSet(),iterations,
+             new Dictionary<ConfigurationObjectType,int>{{Point,iterations},{Line,0},{Circle,0}},mode,hidden?new[]{a}:Array.Empty<ConfigurationObject>());
+     }
+-    private static string Snapshot(ProblemGeneratorOutput output)
++    internal static string Snapshot(ProblemGeneratorOutput output)
+     {
+         var f=new OutputFormatter(output.Configuration.AllObjects);
+         return f.FormatConfiguration(output.Configuration)+"\n"+string.Join("\n",output.OldTheorems.AllObjects.Concat(output.NewTheorems.AllObjects).Select(f.FormatTheorem).OrderBy(x=>x));
+diff --git a/Source/Library/GeoGen.ProblemGenerator/ExactRankSelector.cs b/Source/Library/GeoGen.ProblemGenerator/ExactRankSelector.cs
+new file mode 100644
+--- /dev/null
++++ b/Source/Library/GeoGen.ProblemGenerator/ExactRankSelector.cs
+@@ -0,0 +1,102 @@
++using System.Diagnostics;
++using GeoGen.ConfigurationGenerator;
++using GeoGen.Constructor;
++using GeoGen.Core;
++using GeoGen.TheoremFinder;
++
++namespace GeoGen.ProblemGenerator;
++
++/// <summary>Exact local rank among all canonical, symmetry-reachable, constructible siblings.
++/// Preview geometry is discarded; only definitions and scalar scores are kept.</summary>
++internal sealed class ExactRankSelector
++{
++    private readonly TheoremSearchSettings _settings;
++    private readonly ProblemGeneratorInput _input;
++    private readonly IGeometryConstructor _constructor;
++    private readonly ITheoremFinder _finder;
++    private readonly SoftTheoremBias _monitor;
++    private readonly int _lastDepth;
++    private readonly record struct Row(ConstructedConfigurationObject Object, double Score, int Index);
++
++    public ExactRankSelector(TheoremSearchSettings settings, ProblemGeneratorInput input,
++        IGeometryConstructor constructor, ITheoremFinder finder, SoftTheoremBias monitor)
++    {
++        _settings=settings;_input=input;_constructor=constructor;_finder=finder;_monitor=monitor;
++        var budget=input.Constructions.Select(c=>c.OutputType).Distinct().Sum(t=>(long)input.MaximalNumbersOfObjectsToAdd[t]);
++        _lastDepth=(int)Math.Min(input.NumberOfIterations,budget);
++    }
++    private RankInterval Window(int depth)
++    {
++        if(depth>=_lastDepth && _settings.FinalRankInterval!=null)return _settings.FinalRankInterval;
++        return _settings.RankIntervals.Length==0 ? null : _settings.RankIntervals[Math.Min(depth-1,_settings.RankIntervals.Length-1)];
++    }
++    public IEnumerable<GeneratedConfiguration> Select(GeneratedConfiguration parent,
++        IEnumerable<GeneratedConfiguration> siblings, PicturesOfConfiguration pictures,
++        ContextualPicture context, TheoremMap oldTheorems)
++    {
++        var window=Window(parent.IterationIndex+1);
++        // Do not enumerate or score the list at all in an unrestricted step.
++        if(window==null || window.IsIdentity)return siblings;
++        return SelectExact(parent,siblings,pictures,context,oldTheorems,window);
++    }
++    private IEnumerable<GeneratedConfiguration> SelectExact(GeneratedConfiguration parent,
++        IEnumerable<GeneratedConfiguration> siblings, PicturesOfConfiguration pictures,
++        ContextualPicture context, TheoremMap oldTheorems, RankInterval window)
++    {
++        var began=Stopwatch.GetTimestamp();var pool=new List<Row>();var selected=0;var complete=false;var reported=false;
++        double? minimum=null,maximum=null;
++        _monitor.BeginRankPool(parent.IterationIndex,window);
++        try
++        {
++            // No preview may touch the streaming verifier's DFS caches.
++            foreach(var candidate in siblings)
++            {
++                _monitor.BeforeRankCandidate();
++                if(!_monitor.AllowsRoot(candidate))continue;
++                if(!SymmetryReachability.CanComplete(candidate,_input))
++                { _monitor.RankSymmetryRejected();continue; }
++                double score;
++                try
++                {
++                    _monitor.RankBeforeDrawing();
++                    var (newPictures,data)=_constructor.ConstructByCloning(pictures,candidate);
++                    if(newPictures==null || data.InconstructibleObject!=null || data.Duplicates!=default)
++                    { _monitor.RankInvalid();continue; }
++                    var newContext=context.ConstructByCloning(newPictures);
++                    if(newContext==null){_monitor.RankInvalid();continue;}
++                    var added=_finder.FindNewTheorems(newContext,oldTheorems,out var invalid);
++                    _monitor.RankFound();
++                    if(window.MinimumNewTheorems>0 && added.AllObjects.Distinct().Take(window.MinimumNewTheorems).Count()<window.MinimumNewTheorems)
++                    { _monitor.RankBelowMinimum();continue; }
++                    var all=new TheoremMap(oldTheorems.AllObjects.Except(invalid).Concat(added.AllObjects));
++                    var metrics=TheoremSearchMetrics.Measure(candidate,all.AllObjects,_settings);
++                    _monitor.RankMeasured();
++                    score=window.Metric=="theoremsPerPoint" ? metrics.TotalTheoremWeight/Math.Max(1,metrics.Points) :
++                        candidate.LastConstructedObject.ObjectType==ConfigurationObjectType.Point ? metrics.NewPointDegree : 0;
++                }
++                catch(InconsistentPicturesException){_monitor.RankInvalid();continue;}
++                pool.Add(new Row(candidate.LastConstructedObject,score,pool.Count));
++            }
++            var sorted=pool.ToArray();
++            Array.Sort(sorted,(a,b)=>{var comparison=a.Score.CompareTo(b.Score);return comparison!=0?comparison:a.Index.CompareTo(b.Index);});
++            var (first,end)=window.Indices(sorted.Length);var keep=new bool[pool.Count];
++            for(var i=first;i<end;i++){keep[sorted[i].Index]=true;selected++;}
++            if(sorted.Length>0){minimum=sorted[0].Score;maximum=sorted[^1].Score;}
++            complete=true;
++            _monitor.EndRankPool(parent.IterationIndex,window,pool.Count,selected,
++                Stopwatch.GetElapsedTime(began).TotalMilliseconds,true,minimum,maximum);
++            reported=true;
++            // Keep only selected definitions alive while DFS descends; drop the preview arrays.
++            var chosen=pool.Where(row=>keep[row.Index]).Select(row=>row.Object).ToArray();
++            pool.Clear();pool=null;sorted=null;keep=null;
++            // Original sibling order is retained inside the allowed rank interval.
++            foreach(var obj in chosen)
++                yield return new GeneratedConfiguration(parent,obj,parent.IterationIndex+1);
++        }
++        finally
++        {
++            if(!reported)_monitor.EndRankPool(parent.IterationIndex,window,pool?.Count??0,selected,
++                Stopwatch.GetElapsedTime(began).TotalMilliseconds,complete,minimum,maximum);
++        }
++    }
++}
+diff --git a/Source/Library/GeoGen.ProblemGenerator/SymmetryReachability.cs b/Source/Library/GeoGen.ProblemGenerator/SymmetryReachability.cs
+new file mode 100644
+--- /dev/null
++++ b/Source/Library/GeoGen.ProblemGenerator/SymmetryReachability.cs
+@@ -0,0 +1,29 @@
++using GeoGen.ConfigurationGenerator;
++using GeoGen.Core;
++using GeoGen.Utilities;
++
++namespace GeoGen.ProblemGenerator;
++
++/// <summary>Original pre-drawing symmetry check, shared by streaming verification and exact ranking.</summary>
++internal static class SymmetryReachability
++{
++    public static bool CanComplete(GeneratedConfiguration configuration, ProblemGeneratorInput input)
++    {
++        if (input.SymmetryGenerationMode == SymmetryGenerationMode.GenerateBothSymmetricAndAsymmetric) return true;
++        var options = input.SymmetryGenerationMode switch
++        {
++            SymmetryGenerationMode.GenerateOnlySymmetric => configuration.GetObjectsThatWouldMakeThisConfigurationSymmetric(),
++            SymmetryGenerationMode.GenerateOnlyFullySymmetric => configuration.GetObjectsThatWouldMakeThisConfigurationFullySymmetric().ToEnumerable(),
++            _ => throw new GeoGenException($"Unhandled symmetry mode: {input.SymmetryGenerationMode}")
++        };
++        return options.Any(objects =>
++        {
++            if (objects.Any(o => o.PassedArguments.FlattenedList.Any(input.HiddenPoints.Contains)) ||
++                configuration.IterationIndex + objects.Count > input.NumberOfIterations ||
++                objects.Any(o => !input.Constructions.Contains(o.Construction))) return false;
++            return objects.GroupBy(o => o.ObjectType).All(group =>
++                group.Count() + configuration.ObjectMap.GetObjectsForKeys(group.Key).Count() -
++                input.InitialConfiguration.ObjectMap.GetObjectsForKeys(group.Key).Count() <= input.MaximalNumbersOfObjectsToAdd[group.Key]);
++        });
++    }
++}
+diff --git a/Source/Tests/UnitTests/GeoGen.ConfigurationGenerator.Tests/RankSearchTest.cs b/Source/Tests/UnitTests/GeoGen.ConfigurationGenerator.Tests/RankSearchTest.cs
+new file mode 100644
+--- /dev/null
++++ b/Source/Tests/UnitTests/GeoGen.ConfigurationGenerator.Tests/RankSearchTest.cs
+@@ -0,0 +1,190 @@
++using GeoGen.Core;
++using GeoGen.ProblemGenerator;
++using NUnit.Framework;
++using GeoGen.Utilities;
++using System.Text.Json;
++using static GeoGen.Core.PredefinedConstructions;
++
++namespace GeoGen.ConfigurationGenerator.Tests;
++
++[TestFixture]
++public class RankSearchTest
++{
++    [TestCase(SymmetryGenerationMode.GenerateBothSymmetricAndAsymmetric,ConfigurationFilterType.MemoryEfficient)]
++    [TestCase(SymmetryGenerationMode.GenerateOnlySymmetric,ConfigurationFilterType.MemoryEfficient)]
++    [TestCase(SymmetryGenerationMode.GenerateOnlyFullySymmetric,ConfigurationFilterType.MemoryEfficient)]
++    [TestCase(SymmetryGenerationMode.GenerateBothSymmetricAndAsymmetric,ConfigurationFilterType.Fast)]
++    [TestCase(SymmetryGenerationMode.GenerateOnlySymmetric,ConfigurationFilterType.Fast)]
++    [TestCase(SymmetryGenerationMode.GenerateOnlyFullySymmetric,ConfigurationFilterType.Fast)]
++    public void Full_interval_is_original_generation_without_preview(SymmetryGenerationMode mode,ConfigurationFilterType filter)
++    {
++        var (generator,constructor,finder,kernel)=SoftSearchTest.Services(filter);using(kernel)
++        {
++            var input=SoftSearchTest.Input(mode);
++            var expected=generator.GenerateStandard(input).generationOutputs.Select(SoftSearchTest.Snapshot).ToArray();
++            var work=(constructor.Roots,constructor.Clones,finder.Initial,finder.Updates);
++            constructor.Roots=constructor.Clones=finder.Initial=finder.Updates=0;
++            var path=Path.GetTempFileName();
++            try
++            {
++                var policy=new TheoremSearchSettings{Policy="soft",TraceFile=path,RankIntervals=new[]{new RankInterval()},FinalRankInterval=new()};
++                var actual=generator.GenerateStandard(input,policy).generationOutputs.Select(SoftSearchTest.Snapshot).ToArray();
++                Assert.That(actual,Is.EqualTo(expected));Assert.That((constructor.Roots,constructor.Clones,finder.Initial,finder.Updates),Is.EqualTo(work));
++                using var doc=JsonDocument.Parse(File.ReadAllLines(path).Last());var counters=doc.RootElement.GetProperty("counters");
++                Assert.That(counters.GetProperty("RankDrawingAttempts").GetInt64(),Is.Zero);
++                Assert.That(counters.GetProperty("MetricsEvaluated").GetInt64(),Is.Zero);
++            }
++            finally{File.Delete(path);}
++        }
++    }
++    [TestCase(0,.5,"Midpoint")]
++    [TestCase(.5,1,"Orthocenter")]
++    public void Rank_is_measured_after_the_actual_construction(double from,double to,string expected)
++    {
++        var (generator,constructor,finder,kernel)=SoftSearchTest.Services();using(kernel)
++        {
++            var policy=new TheoremSearchSettings{Policy="soft",RankIntervals=new[]{new RankInterval{From=from,To=to}}};
++            var outputs=generator.GenerateStandard(SoftSearchTest.Input(SymmetryGenerationMode.GenerateBothSymmetricAndAsymmetric,1),policy).generationOutputs.ToArray();
++            Assert.That(outputs.Length,Is.EqualTo(1));Assert.That(outputs[0].Configuration.LastConstructedObject.Construction.Name,Is.EqualTo(expected));
++            // Both candidates were inspected; only the chosen one was reconstructed for DFS.
++            Assert.That(constructor.Clones,Is.EqualTo(3));Assert.That(finder.Updates,Is.EqualTo(3));
++        }
++    }
++    [TestCase(0,.5,0,5)] [TestCase(.3,.7,3,7)] [TestCase(.5,1,5,10)]
++    public void Fraction_boundaries_match_the_sorted_list(double from,double to,int first,int end)
++        =>Assert.That(new RankInterval{From=from,To=to}.Indices(10),Is.EqualTo((first,end)));
++    [Test]
++    public void Equal_scores_use_original_sibling_order_and_reproducible_rounding()
++    {
++        var (generator,constructor,finder,kernel)=SoftSearchTest.Services(ConfigurationFilterType.Simple);using(kernel)
++        {
++            var input=SoftSearchTest.Input(SymmetryGenerationMode.GenerateBothSymmetricAndAsymmetric,1,midpointOnly:true);
++            var all=generator.GenerateStandard(input).generationOutputs.Select(SoftSearchTest.Snapshot).ToArray();
++            var policy=new TheoremSearchSettings{Policy="soft",RankIntervals=new[]{new RankInterval{To=.5}}};
++            var selected=generator.GenerateStandard(input,policy).generationOutputs.Select(SoftSearchTest.Snapshot).ToArray();
++            Assert.That(all.Length,Is.EqualTo(3));Assert.That(selected,Is.EqualTo(all.Take(2)));
++        }
++    }
++    [Test]
++    public void Preview_does_not_corrupt_parent_caches_or_incremental_theorems()
++    {
++        var (generator,constructor,finder,kernel)=SoftSearchTest.Services();using(kernel)
++        {
++            var policy=new TheoremSearchSettings{Policy="soft",RankIntervals=new[]{new RankInterval{From=.3,To=.7}}};
++            var outputs=generator.GenerateStandard(SoftSearchTest.Input(SymmetryGenerationMode.GenerateBothSymmetricAndAsymmetric,2),policy).generationOutputs.ToArray();
++            Assert.That(outputs,Is.Not.Empty);
++            foreach(var output in outputs)
++                Assert.That(output.OldTheorems.AllObjects.Concat(output.NewTheorems.AllObjects).ToHashSet().SetEquals(finder.FindAllTheorems(output.ContextualPicture).AllObjects),Is.True);
++        }
++    }
++    [Test]
++    public void Symmetry_reachability_is_checked_before_preview_geometry()
++    {
++        var (generator,constructor,finder,kernel)=SoftSearchTest.Services();using(kernel)
++        {
++            var policy=new TheoremSearchSettings{Policy="soft",RankIntervals=new[]{new RankInterval{To=.5}}};
++            var outputs=generator.GenerateStandard(SoftSearchTest.Input(SymmetryGenerationMode.GenerateOnlyFullySymmetric,2,midpointOnly:true),policy).generationOutputs.ToArray();
++            Assert.That(outputs,Is.Empty);Assert.That(constructor.Clones,Is.Zero);
++        }
++    }
++    [Test]
++    public void Ranked_steps_can_still_complete_a_symmetric_orbit()
++    {
++        var (generator,constructor,finder,kernel)=SoftSearchTest.Services();using(kernel)
++        {
++            var policy=new TheoremSearchSettings{Policy="soft",RankIntervals=new[]{new RankInterval{To=.5}}};
++            var outputs=generator.GenerateStandard(SoftSearchTest.Input(SymmetryGenerationMode.GenerateOnlyFullySymmetric,3,midpointOnly:true),policy).generationOutputs.ToArray();
++            Assert.That(outputs,Is.Not.Empty);Assert.That(outputs.All(o=>o.Configuration.IsFullySymmetric()),Is.True);
++        }
++    }
++    [Test]
++    public void A_full_first_step_and_ranked_second_step_have_independent_schedules()
++    {
++        var (generator,constructor,finder,kernel)=SoftSearchTest.Services();using(kernel)
++        {
++            var path=Path.GetTempFileName();try
++            {
++                var policy=new TheoremSearchSettings{Policy="soft",TraceFile=path,RankIntervals=new[]{new RankInterval(),new RankInterval{To=.5}}};
++                generator.GenerateStandard(SoftSearchTest.Input(SymmetryGenerationMode.GenerateBothSymmetricAndAsymmetric,2),policy).generationOutputs.ToArray();
++                var pools=File.ReadAllLines(path).Select(s=>JsonDocument.Parse(s)).Where(d=>d.RootElement.GetProperty("kind").GetString()=="rank-pool-start").ToArray();
++                Assert.That(pools,Is.Not.Empty);Assert.That(pools.All(d=>d.RootElement.GetProperty("parentDepth").GetInt32()==1),Is.True);
++                foreach(var doc in pools)doc.Dispose();
++            }finally{File.Delete(path);}
++        }
++    }
++    [Test]
++    public void Final_interval_overrides_the_last_scheduled_interval()
++    {
++        var (generator,constructor,finder,kernel)=SoftSearchTest.Services();using(kernel)
++        {
++            var policy=new TheoremSearchSettings{Policy="soft",RankIntervals=new[]{new RankInterval{To=.5}},FinalRankInterval=new(){From=.5,To=1}};
++            var outputs=generator.GenerateStandard(SoftSearchTest.Input(SymmetryGenerationMode.GenerateBothSymmetricAndAsymmetric,1),policy).generationOutputs.ToArray();
++            Assert.That(outputs.Single().Configuration.LastConstructedObject.Construction.Name,Is.EqualTo("Orthocenter"));
++        }
++    }
++    [Test]
++    public void Minimum_new_facts_is_an_explicit_precondition_before_ranking()
++    {
++        var (generator,constructor,finder,kernel)=SoftSearchTest.Services();using(kernel)
++        {
++            var policy=new TheoremSearchSettings{Policy="soft",RankIntervals=new[]{new RankInterval{To=.5,MinimumNewTheorems=3}}};
++            var outputs=generator.GenerateStandard(SoftSearchTest.Input(SymmetryGenerationMode.GenerateBothSymmetricAndAsymmetric,1),policy).generationOutputs.ToArray();
++            Assert.That(outputs.Single().Configuration.LastConstructedObject.Construction.Name,Is.EqualTo("Orthocenter"));
++        }
++    }
++    [Test]
++    public void Pool_has_all_valid_children_even_when_there_are_more_than_sixteen()
++    {
++        var (generator,constructor,finder,kernel)=SoftSearchTest.Services(ConfigurationFilterType.Simple);using(kernel)
++        {
++            var roots=SoftSearchTest.Input(SymmetryGenerationMode.GenerateBothSymmetricAndAsymmetric,1).InitialConfiguration;
++            var a=roots.LooseObjects[0];var b=roots.LooseObjects[1];var c=roots.LooseObjects[2];
++            var initial=new Configuration(roots.LooseObjectsHolder,new[]{
++                new ConstructedConfigurationObject(ComposedConstructions.Incenter,a,b,c),
++                new ConstructedConfigurationObject(ComposedConstructions.Circumcenter,a,b,c),
++                new ConstructedConfigurationObject(ComposedConstructions.Orthocenter,a,b,c),
++                new ConstructedConfigurationObject(Midpoint,b,c)});
++            var input=new ProblemGeneratorInput(initial,new Construction[]{Midpoint}.ToReadOnlyHashSet(),1,
++                new Dictionary<ConfigurationObjectType,int>{{ConfigurationObjectType.Point,1},{ConfigurationObjectType.Line,0},{ConfigurationObjectType.Circle,0}},
++                SymmetryGenerationMode.GenerateBothSymmetricAndAsymmetric);
++            var ordinary=generator.GenerateStandard(input).generationOutputs.ToArray();Assert.That(ordinary.Length,Is.GreaterThan(16));
++            var path=Path.GetTempFileName();try
++            {
++                var window=new RankInterval{From=.25,To=.75};
++                var outputs=generator.GenerateStandard(input,new TheoremSearchSettings{Policy="soft",TraceFile=path,RankIntervals=new[]{window}}).generationOutputs.ToArray();
++                var (first,end)=window.Indices(ordinary.Length);Assert.That(outputs.Length,Is.EqualTo(end-first));
++                using var doc=JsonDocument.Parse(File.ReadAllLines(path).First(s=>s.Contains("rank-pool-finish")));
++                Assert.That(doc.RootElement.GetProperty("count").GetInt32(),Is.EqualTo(ordinary.Length));
++            }finally{File.Delete(path);}
++        }
++    }
++    [Test]
++    public void Hidden_points_are_excluded_before_the_full_rank_preview()
++    {
++        var (generator,constructor,finder,kernel)=SoftSearchTest.Services();using(kernel)
++        {
++            var input=SoftSearchTest.Input(SymmetryGenerationMode.GenerateBothSymmetricAndAsymmetric,1,hidden:true);
++            var policy=new TheoremSearchSettings{Policy="soft",RankIntervals=new[]{new RankInterval{From=.3,To=.7}}};
++            var outputs=generator.GenerateStandard(input,policy).generationOutputs.ToArray();Assert.That(outputs,Is.Not.Empty);
++            Assert.That(outputs.All(o=>o.Configuration.LastConstructedObject.PassedArguments.FlattenedList.All(a=>!input.HiddenPoints.Contains(a))),Is.True);
++        }
++    }
++    [Test]
++    public void Interrupted_preview_does_not_silently_rank_a_partial_sample()
++    {
++        var (generator,constructor,finder,kernel)=SoftSearchTest.Services();using(kernel)
++        {
++            var path=Path.GetTempFileName();try
++            {
++                var policy=new TheoremSearchSettings{Policy="soft",MaxEvaluated=1,TraceFile=path,RankIntervals=new[]{new RankInterval{To=.5}}};
++                Assert.That(generator.GenerateStandard(SoftSearchTest.Input(SymmetryGenerationMode.GenerateBothSymmetricAndAsymmetric,1),policy).generationOutputs.ToArray(),Is.Empty);
++                using var doc=JsonDocument.Parse(File.ReadAllLines(path).First(s=>s.Contains("rank-pool-finish")));
++                Assert.That(doc.RootElement.GetProperty("complete").GetBoolean(),Is.False);
++                Assert.That(doc.RootElement.GetProperty("selected").GetInt32(),Is.Zero);
++            }finally{File.Delete(path);}
++        }
++    }
++    [TestCase(-.1,.5)] [TestCase(.7,.3)] [TestCase(0,1.1)] [TestCase(.5,.5)]
++    public void Invalid_intervals_fail_before_enumeration(double from,double to)
++        =>Assert.Throws<ArgumentException>(()=>new RankInterval{From=from,To=to}.Validate());
++}

@@ -1,0 +1,13 @@
+{
+  "sourceFilesCompared": 364,
+  "sourceDifferences": 0,
+  "csharpTestsPassed": 289,
+  "pythonTestsPassed": 94,
+  "cleanBuild": true,
+  "extendingRegression": true,
+  "smoke": true,
+  "doctor": true,
+  "guiInteractiveTested": false,
+  "dllSha256": "b19def5f56f3899dca56793132f4899772e3c9bd89a4395d5a1cde9631364df9",
+  "patchSha256": "db9f1e3b2ddfd8a93fb77a8f0d63b98e36b1cd759222ad38fe24dfdb12a328f2"
+}

@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "policy": "soft",
+  "seconds": 600,
+  "rankIntervals": [
+    {
+      "from": 0.3,
+      "to": 0.7
+    }
+  ]
+}

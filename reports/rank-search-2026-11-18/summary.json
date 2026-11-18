@@ -1,0 +1,145 @@
+{
+  "cpuQuota": "2 shared CPUs",
+  "memoryLimitBytes": 8589934592,
+  "execution": "3 concurrent 600s jobs, identical story and seed61",
+  "runs": [
+    {
+      "profile": "all",
+      "counts": {
+        "ready": 17,
+        "rejected": 17,
+        "timeout": 25
+      },
+      "streamedFacts": 59,
+      "firstFactSeconds": 5.334,
+      "finderCallsIncludingPreview": 1806,
+      "maxCompletedPool": 0,
+      "finish": {
+        "kind": "finish",
+        "seconds": 600.0032319,
+        "counters": {
+          "Candidates": 200908,
+          "OutsideReferenceStratum": 0,
+          "SymmetryPrunedBeforeDrawing": 198738,
+          "DrawingAttempts": 2170,
+          "InvalidDrawings": 364,
+          "FinderCalls": 1806,
+          "FinderMs": 20509.09519999999,
+          "MetricsEvaluated": 0,
+          "MetricsMs": 0,
+          "Checkpoints": 0,
+          "IncompleteSymmetryPreserved": 0,
+          "OutsideTargets": 0,
+          "RejectedByBias": 0,
+          "Outputs": 1739,
+          "RankPools": 0,
+          "RankCompletedPools": 0,
+          "RankCandidates": 0,
+          "RankSymmetryPruned": 0,
+          "RankDrawingAttempts": 0,
+          "RankInvalidDrawings": 0,
+          "RankFinderCalls": 0,
+          "RankMetricsEvaluated": 0,
+          "RankSelected": 0,
+          "RankBelowMinimumNewTheorems": 0,
+          "RankingMs": 0
+        },
+        "originalGenerator": true,
+        "cpuMs": 356110,
+        "peakWorkingSet": 129282048
+      }
+    },
+    {
+      "profile": "middle",
+      "counts": {
+        "ready": 2,
+        "rejected": 1,
+        "timeout": 10
+      },
+      "streamedFacts": 13,
+      "firstFactSeconds": 374.164,
+      "finderCallsIncludingPreview": 6608,
+      "maxCompletedPool": 779,
+      "finish": {
+        "kind": "finish",
+        "seconds": 600.0094987,
+        "counters": {
+          "Candidates": 1611,
+          "OutsideReferenceStratum": 0,
+          "SymmetryPrunedBeforeDrawing": 0,
+          "DrawingAttempts": 1611,
+          "InvalidDrawings": 0,
+          "FinderCalls": 1611,
+          "FinderMs": 18921.877400000027,
+          "MetricsEvaluated": 0,
+          "MetricsMs": 0,
+          "Checkpoints": 0,
+          "IncompleteSymmetryPreserved": 0,
+          "OutsideTargets": 0,
+          "RejectedByBias": 0,
+          "Outputs": 1502,
+          "RankPools": 126,
+          "RankCompletedPools": 125,
+          "RankCandidates": 276641,
+          "RankSymmetryPruned": 269998,
+          "RankDrawingAttempts": 6643,
+          "RankInvalidDrawings": 1646,
+          "RankFinderCalls": 4997,
+          "RankMetricsEvaluated": 4997,
+          "RankSelected": 2048,
+          "RankBelowMinimumNewTheorems": 0,
+          "RankingMs": 546748.7327999999
+        },
+        "originalGenerator": true,
+        "cpuMs": 356390,
+        "peakWorkingSet": 118190080
+      }
+    },
+    {
+      "profile": "good-bad",
+      "counts": {
+        "ready": 1,
+        "rejected": 82,
+        "timeout": 41
+      },
+      "streamedFacts": 124,
+      "firstFactSeconds": 25.174,
+      "finderCallsIncludingPreview": 8102,
+      "maxCompletedPool": 819,
+      "finish": {
+        "kind": "finish",
+        "seconds": 600.0067956,
+        "counters": {
+          "Candidates": 1958,
+          "OutsideReferenceStratum": 0,
+          "SymmetryPrunedBeforeDrawing": 0,
+          "DrawingAttempts": 1958,
+          "InvalidDrawings": 0,
+          "FinderCalls": 1958,
+          "FinderMs": 22521.344499999956,
+          "MetricsEvaluated": 0,
+          "MetricsMs": 0,
+          "Checkpoints": 0,
+          "IncompleteSymmetryPreserved": 0,
+          "OutsideTargets": 0,
+          "RejectedByBias": 0,
+          "Outputs": 1908,
+          "RankPools": 74,
+          "RankCompletedPools": 73,
+          "RankCandidates": 161114,
+          "RankSymmetryPruned": 152023,
+          "RankDrawingAttempts": 9091,
+          "RankInvalidDrawings": 2947,
+          "RankFinderCalls": 6144,
+          "RankMetricsEvaluated": 5053,
+          "RankSelected": 2555,
+          "RankBelowMinimumNewTheorems": 1091,
+          "RankingMs": 447912.07820000005
+        },
+        "originalGenerator": true,
+        "cpuMs": 352120,
+        "peakWorkingSet": 117985280
+      }
+    }
+  ]
+}

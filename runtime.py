@@ -275,6 +275,20 @@ SymmetryGenerationMode: GenerateBothSymmetricAndAsymmetric
     print('SMOKE OK: GeoGen → JVM-конвертер → .geo; Extending на контрольных примерах; Geometry упакован.')
 
 
+def require_search_bundle(policy='density', *, rank=False):
+    import hashlib
+    marker_path=ROOT/'data/native-theorem-search.json'
+    if not marker_path.exists():raise ValueError('Пересоберите комплект: нет native theorem search')
+    marker=json.loads(marker_path.read_text())
+    dll=ROOT/'lib/geogen/GeoGen.ProblemGenerator.dll'
+    if marker.get('version')!=1 or marker.get('sha256')!=hashlib.sha256(dll.read_bytes()).hexdigest():
+        raise ValueError('Маркер native theorem search не соответствует DLL')
+    if policy=='soft' and 'original-soft-search-v1' not in marker.get('features',[]):
+        raise ValueError('Пересоберите комплект: DLL не поддерживает мягкий отбор в исходном GeoGen')
+    if rank and 'exact-rank-interval-v1' not in marker.get('features',[]):
+        raise ValueError('Пересоберите комплект: DLL не поддерживает точный ранговый интервал')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest='command', required=True)
@@ -307,6 +321,11 @@ def main():
     discover.add_argument('--view', action='store_true')
     discover.add_argument('--software', action='store_true')
     commands.add_parser('catalog', help='Показать каталог построений и поддержку исходных конфигураций')
+    calibration=commands.add_parser('calibrate-search',help='Контрольная статистика исходного GeoGen по сюжетам, seeds и первым построениям')
+    calibration.add_argument('inputs',type=Path,nargs='+')
+    calibration.add_argument('--output',type=Path,required=True)
+    calibration.add_argument('--budget',default='10m')
+    calibration.add_argument('--seeds',type=int,nargs='+',default=[17,29,43])
     for name in ('experimental-relations','experimental-sample'):
         experiment=commands.add_parser(name,help='Эксперимент: численные совместные связи / выбор начальных построений')
         experiment.add_argument('input',type=Path)
@@ -363,7 +382,14 @@ def main():
         value = getattr(args, key, None)
         if value is not None and not 1 <= value <= 32:
             parser.error('--' + key.replace('_', '-') + ' должен быть в диапазоне 1..32')
-    if args.command in ('experimental-relations','experimental-sample'):
+
+    if args.command=='calibrate-search':
+        from search_calibration import calibrate
+        from discovery import seconds
+        require_search_bundle('soft')
+        result=calibrate(sys.modules[__name__],args.inputs,args.output,budget=seconds(args.budget),seeds=tuple(args.seeds))
+        print('Калибровка: '+str(result/'CALIBRATION.md'))
+    elif args.command in ('experimental-relations','experimental-sample'):
         from families import Catalog,Story
         from experimental_relations import analyze,analyze_configuration,sample_prefix
         if not 8<=args.samples<=32:parser.error('--samples: 8..32')
@@ -397,14 +423,11 @@ def main():
     elif args.command == 'run':
         if args.search_config:
             if args.experimental_relations:parser.error('--search-config нельзя сочетать с --experimental-relations')
-            import hashlib
-            marker_path=ROOT/'data/native-theorem-search.json'
-            if not marker_path.exists():parser.error('Пересоберите комплект: нет native theorem search')
-            marker=json.loads(marker_path.read_text())
-            dll=ROOT/'lib/geogen/GeoGen.ProblemGenerator.dll'
-            if marker.get('version')!=1 or marker.get('sha256')!=hashlib.sha256(dll.read_bytes()).hexdigest():
-                parser.error('Маркер native theorem search не соответствует DLL')
             if not args.search_config.is_file():parser.error('Нет файла --search-config')
+            search_config={k.lower():v for k,v in json.loads(args.search_config.read_text()).items()}
+            search_policy=search_config.get('policy','density')
+            try:require_search_bundle(search_policy,rank=('rankintervals' in search_config or 'finalrankinterval' in search_config))
+            except ValueError as error:parser.error(str(error))
             os.environ['GEOGEN_THEOREM_SEARCH_CONFIG']=str(args.search_config.resolve())
             os.environ['GEOGEN_THEOREM_SEARCH_OUTPUT']=str(args.output.resolve())
         if args.experimental_relations:

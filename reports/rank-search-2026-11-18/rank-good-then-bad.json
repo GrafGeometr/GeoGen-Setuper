@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "policy": "soft",
+  "seconds": 600,
+  "rankIntervals": [
+    {
+      "from": 0.5,
+      "to": 1
+    }
+  ],
+  "finalRankInterval": {
+    "metric": "newPointTheorems",
+    "from": 0,
+    "to": 0.5,
+    "minimumNewTheorems": 1
+  },
+  "seed": 61
+}

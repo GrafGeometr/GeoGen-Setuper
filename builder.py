@@ -306,6 +306,8 @@ class Builder:
         self.apply_source_patch(self.work / 'Geometry', HERE / 'patches/quality-geometry.patch')
         self.apply_source_patch(self.work / 'GeoGen', HERE / 'patches/experimental-relations.patch')
         self.apply_source_patch(self.work / 'GeoGen', HERE / 'patches/native-theorem-search.patch')
+        self.apply_source_patch(self.work / 'GeoGen', HERE / 'patches/soft-theorem-search.patch')
+        self.apply_source_patch(self.work / 'GeoGen', HERE / 'patches/rank-interval-search.patch')
         coverage = check_construction_coverage(self.work)
         if self.stage.exists():
             shutil.rmtree(self.stage)
@@ -414,12 +416,12 @@ class Builder:
                   '--output', self.stage / 'lib/java'], name='converter-jre')
         shutil.copy2(HERE / 'runtime.py', self.stage / 'runtime.py')
         shutil.copy2(HERE / 'streaming.py', self.stage / 'streaming.py')
-        for module in ('families.py', 'discovery.py', 'standard_reasoning.py', 'quality.py', 'experimental_relations.py'):
+        for module in ('families.py', 'discovery.py', 'standard_reasoning.py', 'quality.py', 'experimental_relations.py', 'search_calibration.py'):
             shutil.copy2(HERE / module, self.stage / module)
         generator_dll=self.stage/'lib/geogen/GeoGen.ConfigurationGenerator.dll'
         write(self.stage/'data/experimental-relations.json',json.dumps({'version':1,'sha256':hashlib.sha256(generator_dll.read_bytes()).hexdigest()}))
         problem_dll=self.stage/'lib/geogen/GeoGen.ProblemGenerator.dll'
-        write(self.stage/'data/native-theorem-search.json',json.dumps({'version':1,'sha256':hashlib.sha256(problem_dll.read_bytes()).hexdigest()}))
+        write(self.stage/'data/native-theorem-search.json',json.dumps({'version':1,'features':['original-soft-search-v1','exact-rank-interval-v1'],'sha256':hashlib.sha256(problem_dll.read_bytes()).hexdigest()}))
         shutil.copytree(HERE / 'examples/search', self.stage / 'examples/search')
         shutil.copytree(HERE / 'examples/families', self.stage / 'examples/families')
         write(self.stage / 'geometry-suite', '#!/bin/sh\nset -eu\nsuite_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)\nexec python3 "$suite_dir/runtime.py" "$@"\n', True)
@@ -428,7 +430,9 @@ class Builder:
             'platform': platform.platform(), 'sources': self.manifest,
             'dotnet_sdk': DOTNET_VERSION, 'ghc': GHC_VERSION,
             'gradle': GRADLE_VERSION, 'jdk': '17',
-            'patches': ['Native C# search scored after construction and incremental theorem finding',
+            'patches': ['Exact local rank intervals over all valid sibling constructions',
+                        'Original DFS and early symmetry pruning with optional theorem-count ranges',
+                        'Native C# search scored after construction and incremental theorem finding',
                         'Atomic theorem stream, structured Extending checks, live Geometry results',
                         'Complete downstream construction coverage and named parser errors',
                         'Machine construction catalog and bounded family discovery campaigns',
@@ -449,6 +453,10 @@ class Builder:
         shutil.copy2(HERE / 'EXPERIMENTAL_RELATIONS.md', self.stage / 'EXPERIMENTAL_RELATIONS.md')
         shutil.copy2(HERE / 'THEOREM_SEARCH.md', self.stage / 'THEOREM_SEARCH.md')
         shutil.copy2(HERE / 'NATIVE_SEARCH_REPORT.md', self.stage / 'NATIVE_SEARCH_REPORT.md')
+        shutil.copy2(HERE / 'SOFT_SEARCH.md', self.stage / 'SOFT_SEARCH.md')
+        shutil.copy2(HERE / 'SOFT_SEARCH_REPORT.md', self.stage / 'SOFT_SEARCH_REPORT.md')
+        shutil.copy2(HERE / 'RANK_SEARCH.md', self.stage / 'RANK_SEARCH.md')
+        shutil.copy2(HERE / 'RANK_SEARCH_REPORT.md', self.stage / 'RANK_SEARCH_REPORT.md')
         # A broken build must never replace the last working installation.
         self.run([sys.executable, self.stage / 'runtime.py', 'smoke', '--output', self.work / ('smoke-' + uuid.uuid4().hex[:8])], name='smoke')
         dest = self.args.output.resolve()
