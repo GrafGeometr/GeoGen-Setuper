@@ -1,0 +1,1562 @@
+{
+  "version": 1,
+  "constructions": [
+    {
+      "name": "Antigonal",
+      "output": "Point",
+      "arguments": [
+        "Point",
+        "Point",
+        "Point",
+        "Point"
+      ],
+      "parameters": [
+        {
+          "type": "Point"
+        },
+        {
+          "count": 3,
+          "item": {
+            "type": "Point"
+          }
+        }
+      ],
+      "composed": true,
+      "definition": "Quadrilateral: A, B, C, D\nE = ReflectionInLineFromPoints(A, {B, D})\nF = ReflectionInLineFromPoints(A, {C, D})\nG = SecondIntersectionOfTwoCircumcircles(D, {{B, E}, {C, F}})"
+    },
+    {
+      "name": "BisectorEnd",
+      "output": "Point",
+      "arguments": [
+        "Point",
+        "Point",
+        "Point"
+      ],
+      "parameters": [
+        {
+          "type": "Point"
+        },
+        {
+          "count": 2,
+          "item": {
+            "type": "Point"
+          }
+        }
+      ],
+      "composed": true,
+      "definition": "Triangle: A, B, C\nl = InternalAngleBisector(A, {B, C})\nD = IntersectionOfLineAndLineFromPoints(l, {B, C})"
+    },
+    {
+      "name": "BisectorMiddle",
+      "output": "Point",
+      "arguments": [
+        "Point",
+        "Point",
+        "Point"
+      ],
+      "parameters": [
+        {
+          "type": "Point"
+        },
+        {
+          "count": 2,
+          "item": {
+            "type": "Point"
+          }
+        }
+      ],
+      "composed": true,
+      "definition": "Triangle: A, B, C\nl = InternalAngleBisector(A, {B, C})\nD = IntersectionOfLineAndLineFromPoints(l, {B, C})\nE = Midpoint({A, D})"
+    },
+    {
+      "name": "CenterOfCircle",
+      "output": "Point",
+      "arguments": [
+        "Circle"
+      ],
+      "parameters": [
+        {
+          "type": "Circle"
+        }
+      ],
+      "composed": false,
+      "definition": null
+    },
+    {
+      "name": "CenterOfNegativeHomothety",
+      "output": "Point",
+      "arguments": [
+        "Circle",
+        "Circle"
+      ],
+      "parameters": [
+        {
+          "type": "Circle"
+        },
+        {
+          "type": "Circle"
+        }
+      ],
+      "composed": false,
+      "definition": null
+    },
+    {
+      "name": "CenterOfPositiveHomothety",
+      "output": "Point",
+      "arguments": [
+        "Circle",
+        "Circle"
+      ],
+      "parameters": [
+        {
+          "type": "Circle"
+        },
+        {
+          "type": "Circle"
+        }
+      ],
+      "composed": false,
+      "definition": null
+    },
+    {
+      "name": "Centroid",
+      "output": "Point",
+      "arguments": [
+        "Point",
+        "Point",
+        "Point"
+      ],
+      "parameters": [
+        {
+          "count": 3,
+          "item": {
+            "type": "Point"
+          }
+        }
+      ],
+      "composed": true,
+      "definition": "Triangle: A, B, C\nl1 = Median(A, {B, C})\nl2 = Median(B, {A, C})\nD = IntersectionOfLines({l1, l2})"
+    },
+    {
+      "name": "CircleWithCenterThroughPoint",
+      "output": "Circle",
+      "arguments": [
+        "Point",
+        "Point"
+      ],
+      "parameters": [
+        {
+          "type": "Point"
+        },
+        {
+          "type": "Point"
+        }
+      ],
+      "composed": false,
+      "definition": null
+    },
+    {
+      "name": "CircleWithDiameter",
+      "output": "Circle",
+      "arguments": [
+        "Point",
+        "Point"
+      ],
+      "parameters": [
+        {
+          "count": 2,
+          "item": {
+            "type": "Point"
+          }
+        }
+      ],
+      "composed": true,
+      "definition": "LineSegment: A, B\nC = Midpoint({A, B})\nc = CircleWithCenterThroughPoint(C, A)"
+    },
+    {
+      "name": "Circumcenter",
+      "output": "Point",
+      "arguments": [
+        "Point",
+        "Point",
+        "Point"
+      ],
+      "parameters": [
+        {
+          "count": 3,
+          "item": {
+            "type": "Point"
+          }
+        }
+      ],
+      "composed": true,
+      "definition": "Triangle: A, B, C\nc = Circumcircle({A, B, C})\nD = CenterOfCircle(c)"
+    },
+    {
+      "name": "Circumcircle",
+      "output": "Circle",
+      "arguments": [
+        "Point",
+        "Point",
+        "Point"
+      ],
+      "parameters": [
+        {
+          "count": 3,
+          "item": {
+            "type": "Point"
+          }
+        }
+      ],
+      "composed": false,
+      "definition": null
+    },
+    {
+      "name": "DumptyPoint",
+      "output": "Point",
+      "arguments": [
+        "Point",
+        "Point",
+        "Point"
+      ],
+      "parameters": [
+        {
+          "type": "Point"
+        },
+        {
+          "count": 2,
+          "item": {
+            "type": "Point"
+          }
+        }
+      ],
+      "composed": true,
+      "definition": "Triangle: A, B, C\nD = Circumcenter({A, B, C})\nl = Symedian(A, {B, C})\nE = PerpendicularProjection(D, l)"
+    },
+    {
+      "name": "Excenter",
+      "output": "Point",
+      "arguments": [
+        "Point",
+        "Point",
+        "Point"
+      ],
+      "parameters": [
+        {
+          "type": "Point"
+        },
+        {
+          "count": 2,
+          "item": {
+            "type": "Point"
+          }
+        }
+      ],
+      "composed": true,
+      "definition": "Triangle: A, B, C\nD = Incenter({A, B, C})\nE = MidpointOfOppositeArc(A, {B, C})\nF = PointReflection(D, E)"
+    },
+    {
+      "name": "Excircle",
+      "output": "Circle",
+      "arguments": [
+        "Point",
+        "Point",
+        "Point"
+      ],
+      "parameters": [
+        {
+          "type": "Point"
+        },
+        {
+          "count": 2,
+          "item": {
+            "type": "Point"
+          }
+        }
+      ],
+      "composed": true,
+      "definition": "Triangle: A, B, C\nD = Excenter(A, {B, C})\nE = PerpendicularProjectionOnLineFromPoints(D, {B, C})\nc = CircleWithCenterThroughPoint(D, E)"
+    },
+    {
+      "name": "ExternalAngleBisector",
+      "output": "Line",
+      "arguments": [
+        "Point",
+        "Point",
+        "Point"
+      ],
+      "parameters": [
+        {
+          "type": "Point"
+        },
+        {
+          "count": 2,
+          "item": {
+            "type": "Point"
+          }
+        }
+      ],
+      "composed": true,
+      "definition": "Triangle: A, B, C\nD = Incenter({A, B, C})\nl = PerpendicularLineAtPointOfLine(A, D)"
+    },
+    {
+      "name": "ExternalBisectorEnd",
+      "output": "Point",
+      "arguments": [
+        "Point",
+        "Point",
+        "Point"
+      ],
+      "parameters": [
+        {
+          "type": "Point"
+        },
+        {
+          "count": 2,
+          "item": {
+            "type": "Point"
+          }
+        }
+      ],
+      "composed": true,
+      "definition": "Triangle: A, B, C\nl = ExternalAngleBisector(A, {B, C})\nD = IntersectionOfLineAndLineFromPoints(l, {B, C})"
+    },
+    {
+      "name": "ExternalBisectorMiddle",
+      "output": "Point",
+      "arguments": [
+        "Point",
+        "Point",
+        "Point"
+      ],
+      "parameters": [
+        {
+          "type": "Point"
+        },
+        {
+          "count": 2,
+          "item": {
+            "type": "Point"
+          }
+        }
+      ],
+      "composed": true,
+      "definition": "Triangle: A, B, C\nl = ExternalAngleBisector(A, {B, C})\nD = IntersectionOfLineAndLineFromPoints(l, {B, C})\nE = Midpoint({A, D})"
+    },
+    {
+      "name": "FeuerbachPoint",
+      "output": "Point",
+      "arguments": [
+        "Point",
+        "Point",
+        "Point"
+      ],
+      "parameters": [
+        {
+          "count": 3,
+          "item": {
+            "type": "Point"
+          }
+        }
+      ],
+      "composed": true,
+      "definition": "Triangle: A, B, C\nD = Incenter({A, B, C})\nE = PonceletPoint({A, B, C, D})"
+    },
+    {
+      "name": "FPC",
+      "output": "Circle",
+      "arguments": [
+        "Point",
+        "Point",
+        "Point"
+      ],
+      "parameters": [
+        {
+          "type": "Point"
+        },
+        {
+          "count": 2,
+          "item": {
+            "type": "Point"
+          }
+        }
+      ],
+      "composed": true,
+      "definition": "Triangle: A, B, C\nD = Orthocenter({A, B, C})\nE = Midpoint({B, C})\nF = PerpendicularProjectionOnLineFromPoints(A, {B, C})\nc = Circumcircle({D, E, F})"
+    },
+    {
+      "name": "Gergonne",
+      "output": "Point",
+      "arguments": [
+        "Point",
+        "Point",
+        "Point"
+      ],
+      "parameters": [
+        {
+          "count": 3,
+          "item": {
+            "type": "Point"
+          }
+        }
+      ],
+      "composed": true,
+      "definition": "Triangle: A, B, C\nD = IncircleTangentPoint(A, {B, C})\nE = IncircleTangentPoint(B, {A, C})\nF = IntersectionOfLinesFromPoints({{A, D}, {B, E}})"
+    },
+    {
+      "name": "Harmonic",
+      "output": "Point",
+      "arguments": [
+        "Point",
+        "Point",
+        "Point"
+      ],
+      "parameters": [
+        {
+          "type": "Point"
+        },
+        {
+          "count": 2,
+          "item": {
+            "type": "Point"
+          }
+        }
+      ],
+      "composed": true,
+      "definition": "Triangle: A, B, C\nl = LineFromPoints({B, C})\nc = CircleWithDiameter({B, C})\nD = InversionOfPoint(A, c)\nE = ReflectionInLine(l, D)"
+    },
+    {
+      "name": "HeightMiddle",
+      "output": "Point",
+      "arguments": [
+        "Point",
+        "Point",
+        "Point"
+      ],
+      "parameters": [
+        {
+          "type": "Point"
+        },
+        {
+          "count": 2,
+          "item": {
+            "type": "Point"
+          }
+        }
+      ],
+      "composed": true,
+      "definition": "Triangle: A, B, C\nD = PerpendicularProjectionOnLineFromPoints(A, {B, C})\nE = Midpoint({A, D})"
+    },
+    {
+      "name": "HOPoint",
+      "output": "Point",
+      "arguments": [
+        "Point",
+        "Point",
+        "Point"
+      ],
+      "parameters": [
+        {
+          "type": "Point"
+        },
+        {
+          "count": 2,
+          "item": {
+            "type": "Point"
+          }
+        }
+      ],
+      "composed": true,
+      "definition": "Triangle: A, B, C\nD = PerpendicularProjectionOnLineFromPoints(A, {B, C})\nE = Midpoint({B, C})\nF = PointReflection(D, E)"
+    },
+    {
+      "name": "HumptyPoint",
+      "output": "Point",
+      "arguments": [
+        "Point",
+        "Point",
+        "Point"
+      ],
+      "parameters": [
+        {
+          "type": "Point"
+        },
+        {
+          "count": 2,
+          "item": {
+            "type": "Point"
+          }
+        }
+      ],
+      "composed": true,
+      "definition": "Triangle: A, B, C\nD = Orthocenter({A, B, C})\nl = Median(A, {B, C})\nE = PerpendicularProjection(D, l)"
+    },
+    {
+      "name": "Incenter",
+      "output": "Point",
+      "arguments": [
+        "Point",
+        "Point",
+        "Point"
+      ],
+      "parameters": [
+        {
+          "count": 3,
+          "item": {
+            "type": "Point"
+          }
+        }
+      ],
+      "composed": true,
+      "definition": "Triangle: A, B, C\nl1 = InternalAngleBisector(A, {B, C})\nl2 = InternalAngleBisector(B, {A, C})\nD = IntersectionOfLines({l1, l2})"
+    },
+    {
+      "name": "Incircle",
+      "output": "Circle",
+      "arguments": [
+        "Point",
+        "Point",
+        "Point"
+      ],
+      "parameters": [
+        {
+          "count": 3,
+          "item": {
+            "type": "Point"
+          }
+        }
+      ],
+      "composed": true,
+      "definition": "Triangle: A, B, C\nD = Incenter({A, B, C})\nE = PerpendicularProjectionOnLineFromPoints(D, {B, C})\nc = CircleWithCenterThroughPoint(D, E)"
+    },
+    {
+      "name": "IncircleTangentPoint",
+      "output": "Point",
+      "arguments": [
+        "Point",
+        "Point",
+        "Point"
+      ],
+      "parameters": [
+        {
+          "type": "Point"
+        },
+        {
+          "count": 2,
+          "item": {
+            "type": "Point"
+          }
+        }
+      ],
+      "composed": true,
+      "definition": "Triangle: A, B, C\nD = Incenter({A, B, C})\nE = PerpendicularProjectionOnLineFromPoints(D, {B, C})"
+    },
+    {
+      "name": "InternalAngleBisector",
+      "output": "Line",
+      "arguments": [
+        "Point",
+        "Point",
+        "Point"
+      ],
+      "parameters": [
+        {
+          "type": "Point"
+        },
+        {
+          "count": 2,
+          "item": {
+            "type": "Point"
+          }
+        }
+      ],
+      "composed": false,
+      "definition": null
+    },
+    {
+      "name": "IntersectionOfLineAndLineFromPoints",
+      "output": "Point",
+      "arguments": [
+        "Line",
+        "Point",
+        "Point"
+      ],
+      "parameters": [
+        {
+          "type": "Line"
+        },
+        {
+          "count": 2,
+          "item": {
+            "type": "Point"
+          }
+        }
+      ],
+      "composed": true,
+      "definition": "LineAndTwoPoints: l1, A, B\nl2 = LineFromPoints({A, B})\nC = IntersectionOfLines({l1, l2})"
+    },
+    {
+      "name": "IntersectionOfLines",
+      "output": "Point",
+      "arguments": [
+        "Line",
+        "Line"
+      ],
+      "parameters": [
+        {
+          "count": 2,
+          "item": {
+            "type": "Line"
+          }
+        }
+      ],
+      "composed": false,
+      "definition": null
+    },
+    {
+      "name": "IntersectionOfLinesFromPoints",
+      "output": "Point",
+      "arguments": [
+        "Point",
+        "Point",
+        "Point",
+        "Point"
+      ],
+      "parameters": [
+        {
+          "count": 2,
+          "item": {
+            "count": 2,
+            "item": {
+              "type": "Point"
+            }
+          }
+        }
+      ],
+      "composed": true,
+      "definition": "Quadrilateral: A, B, C, D\nl1 = LineFromPoints({A, B})\nl2 = LineFromPoints({C, D})\nE = IntersectionOfLines({l1, l2})"
+    },
+    {
+      "name": "InversionOfPoint",
+      "output": "Point",
+      "arguments": [
+        "Point",
+        "Circle"
+      ],
+      "parameters": [
+        {
+          "type": "Point"
+        },
+        {
+          "type": "Circle"
+        }
+      ],
+      "composed": false,
+      "definition": null
+    },
+    {
+      "name": "Isogonal",
+      "output": "Point",
+      "arguments": [
+        "Point",
+        "Point",
+        "Point",
+        "Point"
+      ],
+      "parameters": [
+        {
+          "type": "Point"
+        },
+        {
+          "count": 3,
+          "item": {
+            "type": "Point"
+          }
+        }
+      ],
+      "composed": true,
+      "definition": "Quadrilateral: A, B, C, D\nl1 = InternalAngleBisector(B, {C, D})\nE = ReflectionInLine(l1, A)\nl2 = InternalAngleBisector(C, {B, D})\nF = ReflectionInLine(l2, A)\nG = IntersectionOfLinesFromPoints({{B, E}, {C, F}})"
+    },
+    {
+      "name": "IsoscelesTrapezoidPoint",
+      "output": "Point",
+      "arguments": [
+        "Point",
+        "Point",
+        "Point"
+      ],
+      "parameters": [
+        {
+          "type": "Point"
+        },
+        {
+          "count": 2,
+          "item": {
+            "type": "Point"
+          }
+        }
+      ],
+      "composed": true,
+      "definition": "Triangle: A, B, C\nl = PerpendicularBisector({B, C})\nD = ReflectionInLine(l, A)"
+    },
+    {
+      "name": "Isotomic",
+      "output": "Point",
+      "arguments": [
+        "Point",
+        "Point",
+        "Point",
+        "Point"
+      ],
+      "parameters": [
+        {
+          "type": "Point"
+        },
+        {
+          "count": 3,
+          "item": {
+            "type": "Point"
+          }
+        }
+      ],
+      "composed": true,
+      "definition": "Quadrilateral: A, B, C, D\nE = IntersectionOfLinesFromPoints({{A, B}, {C, D}})\nF = Midpoint({C, D})\nG = PointReflection(E, F)\nH = IntersectionOfLinesFromPoints({{A, C}, {B, D}})\nI = Midpoint({B, D})\nJ = PointReflection(H, I)\nK = IntersectionOfLinesFromPoints({{B, G}, {C, J}})"
+    },
+    {
+      "name": "Lemoine",
+      "output": "Point",
+      "arguments": [
+        "Point",
+        "Point",
+        "Point"
+      ],
+      "parameters": [
+        {
+          "count": 3,
+          "item": {
+            "type": "Point"
+          }
+        }
+      ],
+      "composed": true,
+      "definition": "Triangle: A, B, C\nl1 = Symedian(A, {B, C})\nl2 = Symedian(B, {A, C})\nD = IntersectionOfLines({l1, l2})"
+    },
+    {
+      "name": "LineFromPoints",
+      "output": "Line",
+      "arguments": [
+        "Point",
+        "Point"
+      ],
+      "parameters": [
+        {
+          "count": 2,
+          "item": {
+            "type": "Point"
+          }
+        }
+      ],
+      "composed": false,
+      "definition": null
+    },
+    {
+      "name": "LineThroughCircumcenter",
+      "output": "Line",
+      "arguments": [
+        "Point",
+        "Point",
+        "Point"
+      ],
+      "parameters": [
+        {
+          "type": "Point"
+        },
+        {
+          "count": 2,
+          "item": {
+            "type": "Point"
+          }
+        }
+      ],
+      "composed": true,
+      "definition": "Triangle: A, B, C\nD = Circumcenter({A, B, C})\nl = LineFromPoints({A, D})"
+    },
+    {
+      "name": "Median",
+      "output": "Line",
+      "arguments": [
+        "Point",
+        "Point",
+        "Point"
+      ],
+      "parameters": [
+        {
+          "type": "Point"
+        },
+        {
+          "count": 2,
+          "item": {
+            "type": "Point"
+          }
+        }
+      ],
+      "composed": true,
+      "definition": "Triangle: A, B, C\nD = Midpoint({B, C})\nl = LineFromPoints({A, D})"
+    },
+    {
+      "name": "MedianMiddle",
+      "output": "Point",
+      "arguments": [
+        "Point",
+        "Point",
+        "Point"
+      ],
+      "parameters": [
+        {
+          "type": "Point"
+        },
+        {
+          "count": 2,
+          "item": {
+            "type": "Point"
+          }
+        }
+      ],
+      "composed": true,
+      "definition": "Triangle: A, B, C\nD = Midpoint({B, C})\nE = Midpoint({A, D})"
+    },
+    {
+      "name": "Midline",
+      "output": "Line",
+      "arguments": [
+        "Point",
+        "Point",
+        "Point"
+      ],
+      "parameters": [
+        {
+          "type": "Point"
+        },
+        {
+          "count": 2,
+          "item": {
+            "type": "Point"
+          }
+        }
+      ],
+      "composed": true,
+      "definition": "Triangle: A, B, C\nD = Midpoint({A, B})\nE = Midpoint({A, C})\nl = LineFromPoints({D, E})"
+    },
+    {
+      "name": "Midpoint",
+      "output": "Point",
+      "arguments": [
+        "Point",
+        "Point"
+      ],
+      "parameters": [
+        {
+          "count": 2,
+          "item": {
+            "type": "Point"
+          }
+        }
+      ],
+      "composed": false,
+      "definition": null
+    },
+    {
+      "name": "MidpointOfArc",
+      "output": "Point",
+      "arguments": [
+        "Point",
+        "Point",
+        "Point"
+      ],
+      "parameters": [
+        {
+          "type": "Point"
+        },
+        {
+          "count": 2,
+          "item": {
+            "type": "Point"
+          }
+        }
+      ],
+      "composed": true,
+      "definition": "Triangle: A, B, C\nD = Excenter(B, {A, C})\nE = Excenter(C, {A, B})\nF = Midpoint({D, E})"
+    },
+    {
+      "name": "MidpointOfOppositeArc",
+      "output": "Point",
+      "arguments": [
+        "Point",
+        "Point",
+        "Point"
+      ],
+      "parameters": [
+        {
+          "type": "Point"
+        },
+        {
+          "count": 2,
+          "item": {
+            "type": "Point"
+          }
+        }
+      ],
+      "composed": true,
+      "definition": "Triangle: A, B, C\nD = Incenter({A, B, C})\nE = Circumcenter({B, C, D})"
+    },
+    {
+      "name": "Nagel",
+      "output": "Point",
+      "arguments": [
+        "Point",
+        "Point",
+        "Point"
+      ],
+      "parameters": [
+        {
+          "count": 3,
+          "item": {
+            "type": "Point"
+          }
+        }
+      ],
+      "composed": true,
+      "definition": "Triangle: A, B, C\nD = Gergonne({A, B, C})\nE = Isotomic(D, {A, B, C})"
+    },
+    {
+      "name": "NinePointCircle",
+      "output": "Circle",
+      "arguments": [
+        "Point",
+        "Point",
+        "Point"
+      ],
+      "parameters": [
+        {
+          "count": 3,
+          "item": {
+            "type": "Point"
+          }
+        }
+      ],
+      "composed": true,
+      "definition": "Triangle: A, B, C\nD = Midpoint({A, B})\nE = Midpoint({B, C})\nF = Midpoint({A, C})\nc = Circumcircle({D, E, F})"
+    },
+    {
+      "name": "OppositePointOnCircumcircle",
+      "output": "Point",
+      "arguments": [
+        "Point",
+        "Point",
+        "Point"
+      ],
+      "parameters": [
+        {
+          "type": "Point"
+        },
+        {
+          "count": 2,
+          "item": {
+            "type": "Point"
+          }
+        }
+      ],
+      "composed": true,
+      "definition": "Triangle: A, B, C\nD = Circumcenter({A, B, C})\nE = PointReflection(A, D)"
+    },
+    {
+      "name": "Orthocenter",
+      "output": "Point",
+      "arguments": [
+        "Point",
+        "Point",
+        "Point"
+      ],
+      "parameters": [
+        {
+          "count": 3,
+          "item": {
+            "type": "Point"
+          }
+        }
+      ],
+      "composed": true,
+      "definition": "Triangle: A, B, C\nl1 = PerpendicularLineToLineFromPoints(A, {B, C})\nl2 = PerpendicularLineToLineFromPoints(C, {A, B})\nD = IntersectionOfLines({l1, l2})"
+    },
+    {
+      "name": "ParallelLine",
+      "output": "Line",
+      "arguments": [
+        "Point",
+        "Line"
+      ],
+      "parameters": [
+        {
+          "type": "Point"
+        },
+        {
+          "type": "Line"
+        }
+      ],
+      "composed": false,
+      "definition": null
+    },
+    {
+      "name": "ParallelLineToLineFromPoints",
+      "output": "Line",
+      "arguments": [
+        "Point",
+        "Point",
+        "Point"
+      ],
+      "parameters": [
+        {
+          "type": "Point"
+        },
+        {
+          "count": 2,
+          "item": {
+            "type": "Point"
+          }
+        }
+      ],
+      "composed": true,
+      "definition": "Triangle: A, B, C\nl1 = LineFromPoints({B, C})\nl2 = ParallelLine(A, l1)"
+    },
+    {
+      "name": "ParallelogramPoint",
+      "output": "Point",
+      "arguments": [
+        "Point",
+        "Point",
+        "Point"
+      ],
+      "parameters": [
+        {
+          "type": "Point"
+        },
+        {
+          "count": 2,
+          "item": {
+            "type": "Point"
+          }
+        }
+      ],
+      "composed": true,
+      "definition": "Triangle: A, B, C\nD = Midpoint({B, C})\nE = PointReflection(A, D)"
+    },
+    {
+      "name": "PerpendicularBisector",
+      "output": "Line",
+      "arguments": [
+        "Point",
+        "Point"
+      ],
+      "parameters": [
+        {
+          "count": 2,
+          "item": {
+            "type": "Point"
+          }
+        }
+      ],
+      "composed": true,
+      "definition": "LineSegment: A, B\nC = Midpoint({A, B})\nl = PerpendicularLineAtPointOfLine(C, A)"
+    },
+    {
+      "name": "PerpendicularLine",
+      "output": "Line",
+      "arguments": [
+        "Point",
+        "Line"
+      ],
+      "parameters": [
+        {
+          "type": "Point"
+        },
+        {
+          "type": "Line"
+        }
+      ],
+      "composed": false,
+      "definition": null
+    },
+    {
+      "name": "PerpendicularLineAtPointOfLine",
+      "output": "Line",
+      "arguments": [
+        "Point",
+        "Point"
+      ],
+      "parameters": [
+        {
+          "type": "Point"
+        },
+        {
+          "type": "Point"
+        }
+      ],
+      "composed": true,
+      "definition": "LineSegment: A, B\nl1 = LineFromPoints({A, B})\nl2 = PerpendicularLine(A, l1)"
+    },
+    {
+      "name": "PerpendicularLineToLineFromPoints",
+      "output": "Line",
+      "arguments": [
+        "Point",
+        "Point",
+        "Point"
+      ],
+      "parameters": [
+        {
+          "type": "Point"
+        },
+        {
+          "count": 2,
+          "item": {
+            "type": "Point"
+          }
+        }
+      ],
+      "composed": true,
+      "definition": "Triangle: A, B, C\nl1 = LineFromPoints({B, C})\nl2 = PerpendicularLine(A, l1)"
+    },
+    {
+      "name": "PerpendicularProjection",
+      "output": "Point",
+      "arguments": [
+        "Point",
+        "Line"
+      ],
+      "parameters": [
+        {
+          "type": "Point"
+        },
+        {
+          "type": "Line"
+        }
+      ],
+      "composed": false,
+      "definition": null
+    },
+    {
+      "name": "PerpendicularProjectionOnLineFromPoints",
+      "output": "Point",
+      "arguments": [
+        "Point",
+        "Point",
+        "Point"
+      ],
+      "parameters": [
+        {
+          "type": "Point"
+        },
+        {
+          "count": 2,
+          "item": {
+            "type": "Point"
+          }
+        }
+      ],
+      "composed": true,
+      "definition": "Triangle: A, B, C\nl = LineFromPoints({B, C})\nD = PerpendicularProjection(A, l)"
+    },
+    {
+      "name": "PointReflection",
+      "output": "Point",
+      "arguments": [
+        "Point",
+        "Point"
+      ],
+      "parameters": [
+        {
+          "type": "Point"
+        },
+        {
+          "type": "Point"
+        }
+      ],
+      "composed": false,
+      "definition": null
+    },
+    {
+      "name": "PonceletPoint",
+      "output": "Point",
+      "arguments": [
+        "Point",
+        "Point",
+        "Point",
+        "Point"
+      ],
+      "parameters": [
+        {
+          "count": 4,
+          "item": {
+            "type": "Point"
+          }
+        }
+      ],
+      "composed": true,
+      "definition": "Quadrilateral: A, B, C, D\nE = Midpoint({A, B})\nF = Midpoint({B, C})\nG = Midpoint({A, C})\nH = Midpoint({A, D})\nI = Midpoint({B, D})\nJ = SecondIntersectionOfTwoCircumcircles(E, {{F, G}, {H, I}})"
+    },
+    {
+      "name": "QuadrilateralCentroid",
+      "output": "Point",
+      "arguments": [
+        "Point",
+        "Point",
+        "Point",
+        "Point"
+      ],
+      "parameters": [
+        {
+          "count": 4,
+          "item": {
+            "type": "Point"
+          }
+        }
+      ],
+      "composed": true,
+      "definition": "Quadrilateral: A, B, C, D\nE = Midpoint({A, B})\nF = Midpoint({C, D})\nG = Midpoint({E, F})"
+    },
+    {
+      "name": "RadiusLine",
+      "output": "Line",
+      "arguments": [
+        "Point",
+        "Point",
+        "Point"
+      ],
+      "parameters": [
+        {
+          "type": "Point"
+        },
+        {
+          "count": 2,
+          "item": {
+            "type": "Point"
+          }
+        }
+      ],
+      "composed": true,
+      "definition": "Triangle: A, B, C\nD = Circumcenter({A, B, C})\nl = LineFromPoints({A, D})"
+    },
+    {
+      "name": "RadiusLineEnd",
+      "output": "Point",
+      "arguments": [
+        "Point",
+        "Point",
+        "Point"
+      ],
+      "parameters": [
+        {
+          "type": "Point"
+        },
+        {
+          "count": 2,
+          "item": {
+            "type": "Point"
+          }
+        }
+      ],
+      "composed": true,
+      "definition": "Triangle: A, B, C\nD = Circumcenter({A, B, C})\nE = IntersectionOfLinesFromPoints({{A, D}, {B, C}})"
+    },
+    {
+      "name": "RadiusLineMiddle",
+      "output": "Point",
+      "arguments": [
+        "Point",
+        "Point",
+        "Point"
+      ],
+      "parameters": [
+        {
+          "type": "Point"
+        },
+        {
+          "count": 2,
+          "item": {
+            "type": "Point"
+          }
+        }
+      ],
+      "composed": true,
+      "definition": "Triangle: A, B, C\nD = Circumcenter({A, B, C})\nE = IntersectionOfLinesFromPoints({{A, D}, {B, C}})\nF = Midpoint({A, E})"
+    },
+    {
+      "name": "ReflectionInLine",
+      "output": "Point",
+      "arguments": [
+        "Line",
+        "Point"
+      ],
+      "parameters": [
+        {
+          "type": "Line"
+        },
+        {
+          "type": "Point"
+        }
+      ],
+      "composed": true,
+      "definition": "LineAndPoint: l, A\nB = PerpendicularProjection(A, l)\nC = PointReflection(A, B)"
+    },
+    {
+      "name": "ReflectionInLineFromPoints",
+      "output": "Point",
+      "arguments": [
+        "Point",
+        "Point",
+        "Point"
+      ],
+      "parameters": [
+        {
+          "type": "Point"
+        },
+        {
+          "count": 2,
+          "item": {
+            "type": "Point"
+          }
+        }
+      ],
+      "composed": true,
+      "definition": "Triangle: A, B, C\nl = LineFromPoints({B, C})\nD = ReflectionInLine(l, A)"
+    },
+    {
+      "name": "SecondIntersectionOfCircleAndLineFromPoints",
+      "output": "Point",
+      "arguments": [
+        "Point",
+        "Point",
+        "Point",
+        "Point"
+      ],
+      "parameters": [
+        {
+          "type": "Point"
+        },
+        {
+          "type": "Point"
+        },
+        {
+          "count": 2,
+          "item": {
+            "type": "Point"
+          }
+        }
+      ],
+      "composed": false,
+      "definition": null
+    },
+    {
+      "name": "SecondIntersectionOfTwoCircumcircles",
+      "output": "Point",
+      "arguments": [
+        "Point",
+        "Point",
+        "Point",
+        "Point",
+        "Point"
+      ],
+      "parameters": [
+        {
+          "type": "Point"
+        },
+        {
+          "count": 2,
+          "item": {
+            "count": 2,
+            "item": {
+              "type": "Point"
+            }
+          }
+        }
+      ],
+      "composed": false,
+      "definition": null
+    },
+    {
+      "name": "Symedian",
+      "output": "Line",
+      "arguments": [
+        "Point",
+        "Point",
+        "Point"
+      ],
+      "parameters": [
+        {
+          "type": "Point"
+        },
+        {
+          "count": 2,
+          "item": {
+            "type": "Point"
+          }
+        }
+      ],
+      "composed": true,
+      "definition": "Triangle: A, B, C\nl1 = TangentLine(B, {A, C})\nl2 = TangentLine(C, {A, B})\nD = IntersectionOfLines({l1, l2})\nl3 = LineFromPoints({A, D})"
+    },
+    {
+      "name": "SymedianEnd",
+      "output": "Point",
+      "arguments": [
+        "Point",
+        "Point",
+        "Point"
+      ],
+      "parameters": [
+        {
+          "type": "Point"
+        },
+        {
+          "count": 2,
+          "item": {
+            "type": "Point"
+          }
+        }
+      ],
+      "composed": true,
+      "definition": "Triangle: A, B, C\nl = Symedian(A, {B, C})\nD = IntersectionOfLineAndLineFromPoints(l, {B, C})"
+    },
+    {
+      "name": "SymedianMiddle",
+      "output": "Point",
+      "arguments": [
+        "Point",
+        "Point",
+        "Point"
+      ],
+      "parameters": [
+        {
+          "type": "Point"
+        },
+        {
+          "count": 2,
+          "item": {
+            "type": "Point"
+          }
+        }
+      ],
+      "composed": true,
+      "definition": "Triangle: A, B, C\nl = Symedian(A, {B, C})\nD = IntersectionOfLineAndLineFromPoints(l, {B, C})\nE = Midpoint({A, D})"
+    },
+    {
+      "name": "TangentLine",
+      "output": "Line",
+      "arguments": [
+        "Point",
+        "Point",
+        "Point"
+      ],
+      "parameters": [
+        {
+          "type": "Point"
+        },
+        {
+          "count": 2,
+          "item": {
+            "type": "Point"
+          }
+        }
+      ],
+      "composed": true,
+      "definition": "Triangle: A, B, C\nD = Circumcenter({A, B, C})\nl = PerpendicularLineAtPointOfLine(A, D)"
+    },
+    {
+      "name": "TangentLinesIntersection",
+      "output": "Point",
+      "arguments": [
+        "Point",
+        "Point",
+        "Point"
+      ],
+      "parameters": [
+        {
+          "type": "Point"
+        },
+        {
+          "count": 2,
+          "item": {
+            "type": "Point"
+          }
+        }
+      ],
+      "composed": true,
+      "definition": "Triangle: A, B, C\nl1 = TangentLine(B, {A, C})\nl2 = TangentLine(C, {A, B})\nD = IntersectionOfLines({l1, l2})"
+    }
+  ],
+  "layouts": [
+    {
+      "name": "LineSegment",
+      "arguments": [
+        "Point",
+        "Point"
+      ],
+      "pipelineSupported": true
+    },
+    {
+      "name": "Triangle",
+      "arguments": [
+        "Point",
+        "Point",
+        "Point"
+      ],
+      "pipelineSupported": true
+    },
+    {
+      "name": "RightTriangle",
+      "arguments": [
+        "Point",
+        "Point",
+        "Point"
+      ],
+      "pipelineSupported": true
+    },
+    {
+      "name": "Quadrilateral",
+      "arguments": [
+        "Point",
+        "Point",
+        "Point",
+        "Point"
+      ],
+      "pipelineSupported": true
+    },
+    {
+      "name": "CyclicQuadrilateral",
+      "arguments": [
+        "Point",
+        "Point",
+        "Point",
+        "Point"
+      ],
+      "pipelineSupported": true
+    },
+    {
+      "name": "LineAndPoint",
+      "arguments": [
+        "Line",
+        "Point"
+      ],
+      "pipelineSupported": false
+    },
+    {
+      "name": "LineAndTwoPoints",
+      "arguments": [
+        "Line",
+        "Point",
+        "Point"
+      ],
+      "pipelineSupported": false
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+Constructions:
+Midpoint
+PointReflection
+Centroid
+QuadrilateralCentroid
+
+Initial configuration:
+Quadrilateral: A, B, C, D
+E = Midpoint(A, C)
+F = Midpoint(B, D)
+
+Iterations: 2
+MaximalPoints: 4
+MaximalLines: 2
+MaximalCircles: 2
+SymmetryGenerationMode: GenerateBothSymmetricAndAsymmetric

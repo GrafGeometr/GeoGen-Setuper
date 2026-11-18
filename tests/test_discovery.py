@@ -85,6 +85,16 @@ settings=json.load(open(sys.argv[1]));folder=pathlib.Path(settings['ProblemGener
         with self.assertRaisesRegex(ValueError, 'изменились'):
             discovery.run(output)
 
+    def test_recheck_after_upgrade_archives_diagrams_and_preserves_provenance(self):
+        output = discovery.create(self.family, self.root/'campaign', budget=3)
+        (self.suite/'BUILD.json').write_text('{"version":"upgraded"}')
+        discovery.run(output,recheck=True)
+        self.assertEqual(len(self.calls),2)
+        self.assertEqual(self.counts(output),{'ready':1,'duplicate':1})
+        self.assertEqual(len(list((output/'archive').glob('*/geo/*.geo'))),1)
+        with sqlite3.connect(output/'tasks.sqlite') as db:
+            self.assertEqual(db.execute('SELECT count(*) FROM origins').fetchone()[0],2)
+
     def test_bad_event_remains_visible_as_error(self):
         self.producer.write_text(self.producer.read_text()+"(folder/'broken.json').write_text('{')\n")
         output = discovery.create(self.family, self.root/'campaign', budget=3)

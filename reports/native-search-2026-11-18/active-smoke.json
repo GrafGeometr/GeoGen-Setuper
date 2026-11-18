@@ -1,0 +1,8 @@
+{
+  "evaluated": 100,
+  "ready": 2,
+  "rejected": 4,
+  "checks": "standard + extending + 8 exact truth samples",
+  "legacyPythonSamplerCalls": 0,
+  "purpose": "feature integration, not task difficulty benchmark"
+}

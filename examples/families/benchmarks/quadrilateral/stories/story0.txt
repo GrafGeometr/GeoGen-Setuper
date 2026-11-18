@@ -1,0 +1,15 @@
+Constructions:
+PonceletPoint
+QuadrilateralCentroid
+Midpoint
+IntersectionOfLinesFromPoints
+
+Initial configuration:
+Quadrilateral: A, B, C, D
+
+
+Iterations: 2
+MaximalPoints: 4
+MaximalLines: 2
+MaximalCircles: 2
+SymmetryGenerationMode: GenerateBothSymmetricAndAsymmetric

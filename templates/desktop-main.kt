@@ -20,7 +20,12 @@ import com.ibis.geometry.common.theme.GeometryTheme
 import java.io.File
 
 @OptIn(ExperimentalComposeUiApi::class)
-fun main(args: Array<String>) = application {
+fun main(args: Array<String>) {
+    if (args.firstOrNull() == "--check-geo" && args.size == 2) {
+        checkGeoInputs(File(args[1]))
+        return
+    }
+    application {
     val dataHome = System.getenv("XDG_DATA_HOME")?.takeIf { it.isNotBlank() }
         ?: File(System.getProperty("user.home"), ".local/share").path
     val dataDir = File(dataHome, "geometry-desktop").apply { mkdirs() }
@@ -54,4 +59,6 @@ fun main(args: Array<String>) = application {
             }
         }
     }
+}
+
 }

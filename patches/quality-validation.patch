@@ -1,0 +1,166 @@
+diff --git a/app/Extending.hs b/app/Extending.hs
+index e525136..c1992dd 100644
+--- a/app/Extending.hs
++++ b/app/Extending.hs
+@@ -1,6 +1,8 @@
+ module Extending where
+ 
+ import Types
++import qualified Functions as F
++import Data.List (nub, subsequences)
+ import RandomGen
+ 
+ import qualified Data.Map as Map
+@@ -26,3 +28,39 @@ check m (Command r x f : xs) c = do
+ 
+ check10 :: [Command] -> Conclusion -> Rand Bool
+ check10 xs c = or <$> replicateM 10 (check Map.empty xs c)
++
++
++-- Evaluate only the original definitions. This is independent of weakening tests.
++validateOriginal :: String -> String -> [String] -> [Command] -> Conclusion -> Rand (Maybe Bool)
++validateOriginal domain layout initial cs conclusion = build Map.empty cs
++  where
++    build m [] =
++      let points = [p | PointShape p <- Map.elems m]
++          root = [p | name <- initial, PointShape p <- [m Map.! name]]
++          noncollinear [a,b,c] = not (F.checkReal ((b-a) * F.conj (c-a)))
++          noncollinear _ = False
++          acute [a,b,c] = all (>0) [F.re((b-a)*F.conj(c-a)),F.re((a-b)*F.conj(c-b)),F.re((a-c)*F.conj(b-c))]
++          acute _ = False
++          convex [a,b,c,d] = let turns=[F.im((b-a)*F.conj(c-b)),F.im((c-b)*F.conj(d-c)),F.im((d-c)*F.conj(a-d)),F.im((a-d)*F.conj(b-a))]
++                             in all (>0) turns || all (<0) turns
++          convex _ = False
++          validLayout = case layout of
++              "LineSegment" -> length root == 2
++              "Triangle" -> noncollinear root && (domain /= "acute" || acute root)
++              "RightTriangle" -> noncollinear root && F.re ((root!!1-root!!0) * F.conj (root!!2-root!!0)) == 0
++              "Quadrilateral" -> convex root
++              "CyclicQuadrilateral" -> convex root
++              _ -> False
++          validShape (PointShape p) = F.norm p >= 0
++          validShape (LineShape l) = F.norm (coef l) > 0
++          validShape (CircleShape c) = radiusSqr c > 0 && F.norm (center c) >= 0
++      in pure $ if validLayout && length (nub points) == length points && all validShape (Map.elems m)
++                then Just (factChecker conclusion (getShps m (arguments conclusion))) else Nothing
++    build m (Command r xs f : rest) = last (f (getShps m xs)) >>= \shape -> build (Map.insert r shape m) rest
++
++
++originalObjects :: [Command] -> Rand (Map.Map String Shape)
++originalObjects = build Map.empty
++  where
++    build m [] = pure m
++    build m (Command r xs f : rest) = last (f (getShps m xs)) >>= \shape -> build (Map.insert r shape m) rest
+diff --git a/app/Main.hs b/app/Main.hs
+index 4f60d6c..389995e 100644
+--- a/app/Main.hs
++++ b/app/Main.hs
+@@ -2,12 +2,15 @@ module Main where
+ 
+ import Parser (parseTheorem)
+ import System.Environment (getArgs)
+-import RandomGen (runRand)
++import RandomGen (runRand, runRandSeed)
+ import Extending
++import Types (Shape(..))
++import qualified Functions as F
++import qualified Data.Map as Map
+ import System.Directory (renameFile, listDirectory)
+ import Data.List (isPrefixOf, isSuffixOf)
+ import Control.Monad (forM_, unless)
+-import Control.Exception (try, SomeException, evaluate, displayException)
++import Control.Exception (try, SomeException, evaluate, displayException, fromException, throwIO, AsyncException)
+ import Control.Concurrent.MSem
+ import Control.Concurrent.Async (forConcurrently_)
+ import System.Timeout (timeout)
+@@ -32,6 +35,12 @@ main = do
+         ["--check-file", file, limit] -> case readMaybe limit of
+             Just ms | ms > 0 && ms <= 3600000 -> checkOne file ms
+             _ -> putStrLn "Expected timeout in milliseconds (1..3600000)" >> exitFailure
++        ["--validate-file", file, limit, count, seedText] -> case (readMaybe limit, readMaybe count, readMaybe seedText) of
++            (Just ms, Just n, Just seed) | ms > 0 && ms <= 3600000 && n > 0 && n <= 100 -> validateOne file ms n seed "generic"
++            _ -> putStrLn "Invalid validation parameters" >> exitFailure
++        ["--validate-file", file, limit, count, seedText, domain] -> case (readMaybe limit, readMaybe count, readMaybe seedText) of
++            (Just ms, Just n, Just seed) | ms > 0 && ms <= 3600000 && n > 0 && n <= 100 && domain `elem` ["generic","acute"] -> validateOne file ms n seed domain
++            _ -> putStrLn "Invalid validation parameters" >> exitFailure
+         [dir] -> legacyMain dir
+         _ -> putStrLn "Usage: GeometryExtending DIR | --check-file FILE TIMEOUT_MS" >> exitFailure
+ 
+@@ -92,3 +101,48 @@ jsonString text = "\"" <> concatMap escape text <> "\""
+         escape '\\' = "\\\\"
+         escape c | ord c < 32 = let hex = showHex (ord c) "" in "\\u" <> replicate (4 - length hex) '0' <> hex
+                  | otherwise = [c]
++
++
++validateOne :: FilePath -> Int -> Int -> Int -> String -> IO ()
++validateOne file milliseconds count seed domain = do
++    outcome <- try (timeout (milliseconds * 1000) $ do
++        contents <- readFile file
++        _ <- evaluate (length contents)
++        let clean = unlines . fmap tail . filter ("!" `isPrefixOf`) . lines $ contents
++            firstLine = takeWhile (/='\n') clean
++            layout = takeWhile (/=':') firstLine
++            initial = words (map (\c -> if c == ',' then ' ' else c) (drop 1 (dropWhile (/=':') firstLine)))
++        case parseTheorem file clean of
++            Left err -> ioError (userError (show err))
++            Right (cs, cc) -> loop layout initial cs cc 0 0
++        ) :: IO (Either SomeException (Maybe String))
++    putStrLn $ case outcome of
++        Left err -> "{\"status\":\"error\",\"message\":" <> jsonString (displayException err) <> "}"
++        Right Nothing -> "{\"status\":\"inconclusive\",\"message\":\"Validation timed out\"}"
++        Right (Just result) -> result
++  where
++    loop layout initial cs cc passed invalid
++      | passed >= count = pure ("{\"status\":\"sampled-valid\",\"samples\":" <> show passed <> ",\"invalidSamples\":" <> show invalid <> ",\"seed\":" <> show seed <> "}")
++      | passed + invalid >= count * 20 = pure "{\"status\":\"inconclusive\",\"message\":\"Not enough nondegenerate samples\"}"
++      | otherwise = do
++          let sampleSeed = seed + passed + invalid
++          result <- try (evaluate (runRandSeed sampleSeed (validateOriginal domain layout initial cs cc)) >>= \value ->
++                    case value of {Nothing -> pure Nothing; Just b -> evaluate b >>= (pure . Just)}) :: IO (Either SomeException (Maybe Bool))
++          case result of
++              Left err -> case (fromException err :: Maybe AsyncException) of
++                  Just _ -> throwIO err
++                  Nothing -> if "Ratio has zero denominator" `isPrefixOf` displayException err
++                             then loop layout initial cs cc passed (invalid+1) else throwIO err
++              Right Nothing -> loop layout initial cs cc passed (invalid+1)
++              Right (Just True) -> loop layout initial cs cc (passed+1) invalid
++              Right (Just False) -> do
++                  let picture = runRandSeed sampleSeed (originalObjects (take (length initial) cs))
++                      points = [(name,p) | name <- initial, PointShape p <- [picture Map.! name]]
++                      coords = "[" <> joinComma ["{\"name\":" <> jsonString name <> ",\"x\":" <> jsonString (show (F.re p)) <> ",\"y\":" <> jsonString (show (F.im p)) <> "}" | (name,p) <- points] <> "]"
++                      acute = case map snd points of
++                          [a,b,c] -> all (>0) [F.re((b-a)*F.conj(c-a)),F.re((a-b)*F.conj(c-b)),F.re((a-c)*F.conj(b-c))]
++                          _ -> False
++                  pure ("{\"status\":\"counterexample\",\"samples\":" <> show passed <> ",\"sampleSeed\":" <> show sampleSeed <> ",\"acute\":" <> (if acute then "true" else "false") <> ",\"initialPoints\":" <> coords <> "}")
++    joinComma [] = ""
++    joinComma [x] = x
++    joinComma (x:xs) = x <> "," <> joinComma xs
+diff --git a/app/RandomGen.hs b/app/RandomGen.hs
+index 39dbf60..5fd7a00 100644
+--- a/app/RandomGen.hs
++++ b/app/RandomGen.hs
+@@ -20,3 +20,6 @@ random x y = Rand . state $ first fromIntegral . randomR (x, y)
+ 
+ 
+ 
++
++runRandSeed :: Int -> Rand a -> a
++runRandSeed seed (Rand x) = evalState x (mkStdGen seed)
+diff --git a/test/Regression.hs b/test/Regression.hs
+index 1bc0a20..cd31055 100644
+--- a/test/Regression.hs
++++ b/test/Regression.hs
+@@ -89,4 +89,13 @@ main = do
+         Right _ -> error "Unsupported construction must not be accepted"
+     let essential = [constPointCmd "A" 0,constPointCmd "B" 10,Command "M" ["A","B"] (functions Map.! "Midpoint")]
+     assert "essential midpoint equality survives" (fixed (check10 essential (Conclusion ["A","M","M","B"] (factCheckers Map.! "EqualLineSegments"))))
++    let initialCommands = [constPointCmd "A" 0,constPointCmd "B" 4,constPointCmd "C" (0 :+ 3)]
++        equality = Conclusion ["A","B","A","C"] (factCheckers Map.! "EqualLineSegments")
++        tautology = Conclusion ["A","B","A","B"] (factCheckers Map.! "EqualLineSegments")
++    assert "original validator refutes a false statement" (fixed (validateOriginal "generic" "Triangle" ["A","B","C"] initialCommands equality) == Just False)
++    assert "original validator checks original facts" (fixed (validateOriginal "generic" "Triangle" ["A","B","C"] initialCommands tautology) == Just True)
++    let obtuse = [constPointCmd "A" 0,constPointCmd "B" 4,constPointCmd "C" ((-1) :+ 2)]
++    assert "generic domain includes obtuse triangles" (fixed (validateOriginal "generic" "Triangle" ["A","B","C"] obtuse tautology) == Just True)
++    assert "acute domain does not silently include obtuse triangles" (fixed (validateOriginal "acute" "Triangle" ["A","B","C"] obtuse tautology) == Nothing)
++    assert "validation seed is reproducible" (runRandSeed 1731 (sequence [rndPoint,rndPoint]) == runRandSeed 1731 (sequence [rndPoint,rndPoint]))
+     putStrLn "EXTENDING REGRESSION OK: six middles, angle vertex, incidence, primitives, essential theorem"

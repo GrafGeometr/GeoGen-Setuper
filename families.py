@@ -207,7 +207,7 @@ class Family:
         data = json.loads(path.read_text(encoding='utf-8-sig'))
         if not isinstance(data, dict):
             raise ValueError('Файл семейства должен содержать JSON-объект')
-        unknown = set(data) - {'version', 'name', 'stories', 'allowedConstructions', 'growth', 'search', 'includeRelaxations', 'seed'}
+        unknown = set(data) - {'version', 'name', 'stories', 'allowedConstructions', 'growth', 'search', 'includeRelaxations', 'seed', 'quality'}
         if unknown or data.get('version') != 1:
             raise ValueError('Неизвестные поля/версия семейства: ' + ', '.join(sorted(unknown)))
         patterns = data.get('stories')
@@ -228,6 +228,14 @@ class Family:
         if not isinstance(data.get('growth', {}), dict) or not isinstance(data.get('search', {}), dict):
             raise ValueError('growth и search должны быть JSON-объектами')
         growth = dict(data.get('growth', {})); search = dict(data.get('search', {}))
+        quality = data.get('quality', {})
+        if not isinstance(quality,dict) or set(quality)-{'samples','milliseconds','triangleDomain'}:
+            raise ValueError('Неизвестные параметры quality')
+        quality = dict(samples=integer(quality.get('samples',8),'quality.samples',1,100),
+                       milliseconds=integer(quality.get('milliseconds',2000),'quality.milliseconds',1,3600000),
+                       triangle_domain=quality.get('triangleDomain','generic'))
+        if quality['triangle_domain'] not in ('generic','acute'):
+            raise ValueError('quality.triangleDomain: generic или acute')
         if set(growth) - {'maxAddedDefinitions', 'variantsPerStory'} or set(search) - {'maxDepth', 'maxJobs', 'sliceSeconds', 'maxPaletteSize'}:
             raise ValueError('Неизвестный параметр growth/search')
         for key, default, high in [('maxAddedDefinitions', 1, 5), ('variantsPerStory', 12, 1000)]:
@@ -242,6 +250,7 @@ class Family:
             if set(story.constructions) - set(allowed):
                 raise ValueError('Построения исходного story выходят за allowedConstructions')
         config = dict(data, allowedConstructions=allowed, growth=growth, search=search,
+                      quality={'samples':quality['samples'],'milliseconds':quality['milliseconds'],'triangleDomain':quality['triangle_domain']},
                       seed=integer(data.get('seed', 1), 'seed', 0, 2**31-1), includeRelaxations=data.get('includeRelaxations', True))
         return cls(config, stories, catalog)
 

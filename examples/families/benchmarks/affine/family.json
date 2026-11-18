@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "name": "affine",
+  "stories": [
+    "stories/*.txt"
+  ],
+  "allowedConstructions": [
+    "Midpoint",
+    "PointReflection",
+    "Centroid",
+    "QuadrilateralCentroid",
+    "IntersectionOfLinesFromPoints"
+  ],
+  "includeRelaxations": true,
+  "seed": 1729,
+  "growth": {
+    "maxAddedDefinitions": 2,
+    "variantsPerStory": 8
+  },
+  "search": {
+    "maxDepth": 4,
+    "maxJobs": 32,
+    "sliceSeconds": 4,
+    "maxPaletteSize": 4
+  }
+}

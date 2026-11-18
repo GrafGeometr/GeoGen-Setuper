@@ -17,7 +17,7 @@ import time
 
 import runtime as app
 
-TERMINAL = ('ready', 'unchecked', 'rejected', 'error', 'timeout', 'duplicate', 'standard')
+TERMINAL = ('ready', 'unchecked', 'rejected', 'error', 'timeout', 'duplicate', 'standard', 'review')
 
 
 def atomic_text(path, text):
@@ -56,6 +56,7 @@ class Queue:
             state TEXT NOT NULL, message TEXT NOT NULL DEFAULT '', geo TEXT NOT NULL DEFAULT '',
             discovered REAL NOT NULL, started REAL, finished REAL, producer_alive INTEGER)''')
         self.db.execute('CREATE INDEX IF NOT EXISTS task_fingerprint ON tasks(fingerprint)')
+        self.db.execute('CREATE TABLE IF NOT EXISTS quality_reports (id TEXT PRIMARY KEY, report TEXT NOT NULL, score REAL NOT NULL, verdict TEXT NOT NULL)')
         self.db.commit()
         self.seen = {row['id'] for row in self.db.execute('SELECT id FROM tasks')}
 
@@ -102,12 +103,18 @@ class Queue:
     def finish(self, identifier, result, producer_alive):
         self.db.execute('UPDATE tasks SET state=?,message=?,geo=?,finished=?,producer_alive=? WHERE id=?',
                         (result['state'], result.get('message', ''), result.get('geo', ''), time.time(), int(producer_alive), identifier))
+        if result.get('quality') is not None:
+            report = result['quality']
+            self.db.execute('INSERT OR REPLACE INTO quality_reports VALUES(?,?,?,?)', (identifier,json.dumps(report,ensure_ascii=False),report['qualityScore'],report['verdict']))
+        else:
+            self.db.execute('DELETE FROM quality_reports WHERE id=?',(identifier,))
         self.db.commit()
 
     def export(self, metadata):
         counts = {r[0]: r[1] for r in self.db.execute('SELECT state,count(*) FROM tasks GROUP BY state')}
         metadata = dict(metadata, counts=counts, updatedAt=time.time())
         atomic_text(self.job / 'run-state.json', json.dumps(metadata, ensure_ascii=False, indent=2))
+        quality = {r['id']: (r['verdict'],r['score']) for r in self.db.execute('SELECT id,verdict,score FROM quality_reports')}
         rows = self.db.execute('SELECT * FROM tasks ORDER BY rowid ASC')
         lines = []
         for row in rows:
@@ -117,8 +124,10 @@ class Queue:
             if isinstance(score, bool) or not isinstance(score, (int, float)) or not math.isfinite(score):
                 score = ''
             topic = str(event.get('theorem', '')).partition(':')[0].strip() or 'Unknown'
-            lines.append('\t'.join(safe_text(x) for x in
-                         (row['id'], row['state'], event.get('theorem', ''), row['geo'], row['message'], score, topic)))
+            fields = (row['id'], row['state'], event.get('theorem', ''), row['geo'], row['message'], score, topic)
+            if metadata.get('qualityChecks'):
+                fields += quality.get(row['id'], ('unverified',''))
+            lines.append('\t'.join(safe_text(x) for x in fields))
         atomic_text(self.job / 'results.tsv', '\n'.join(lines) + ('\n' if lines else ''))
         display_phase = metadata['phase']
         if display_phase == 'finished' and metadata.get('searchState') == 'stopped':
@@ -160,11 +169,12 @@ def finding_filename(identifier, event):
     return f'{kind}_{score}__{identifier}.geo'
 
 
-def process_event(job, identifier, event, extending=True, check_ms=1000, standard=False):
+def process_event(job, identifier, event, extending=True, check_ms=1000, standard=False, quality_checks=False):
     """One isolated process per check: crashes and timeouts never imply acceptance."""
     task_dir = job / 'tasks' / identifier
     task_dir.mkdir(parents=True, exist_ok=True)
     diagnostic = task_dir / 'worker.log'
+    quality_report = None
     try:
         if standard:
             from standard_reasoning import check, verify_certificate
@@ -198,6 +208,11 @@ def process_event(job, identifier, event, extending=True, check_ms=1000, standar
                 raise RuntimeError('Invalid Extending response')
             if status != 'accepted':
                 return {'state': status, 'message': str(response.get('message', ''))}
+        if quality_checks:
+            from quality import inspect_event, description
+            quality_report = inspect_event(event, app.EXTENDING, task_dir, **(quality_checks if isinstance(quality_checks,dict) else {}))
+            if quality_report['verdict'] == 'standard':
+                return {'state':'standard','message':'Короткое стандартное доказательство: '+quality_report['standard']['method'], 'quality':quality_report}
         readable = task_dir / 'theorem.txt'
         readable.write_text(event['readable'], encoding='utf-8')
         staging = task_dir / 'converted'
@@ -216,7 +231,14 @@ def process_event(job, identifier, event, extending=True, check_ms=1000, standar
             raise RuntimeError(f'Conversion failed ({converted.returncode}); see {diagnostic}')
         filename = finding_filename(identifier, event)
         files[0].replace(job / 'geo' / filename)
-        return {'state': 'ready' if extending else 'unchecked', 'geo': filename}
+        result = {'state': 'ready' if extending else 'unchecked', 'geo': filename}
+        if quality_report is not None:
+            result['quality'] = quality_report
+            if quality_report['verdict'] == 'review':
+                result.update(state='review', message=description(quality_report))
+            else:
+                result['message']=description(quality_report)
+        return result
     except subprocess.TimeoutExpired as error:
         diagnostic.write_text(str(error), encoding='utf-8')
         return {'state': 'timeout', 'message': str(error)}
@@ -239,7 +261,7 @@ def stop_producer(process):
             process.wait()
 
 
-def consume(job, metadata, *, producer=None, workers=2, extending=True, check_ms=1000, timeout=3600, standard=False):
+def consume(job, metadata, *, producer=None, workers=2, extending=True, check_ms=1000, timeout=3600, standard=False, quality_checks=False):
     queue = Queue(job)
     queue.db.execute("UPDATE tasks SET state='queued' WHERE state='processing'")
     queue.db.commit()
@@ -289,7 +311,7 @@ def consume(job, metadata, *, producer=None, workers=2, extending=True, check_ms
                 row = queue.take()
                 if not row:
                     break
-                future = pool.submit(process_event, job, row['id'], json.loads(row['event']), extending, check_ms, standard)
+                future = pool.submit(process_event, job, row['id'], json.loads(row['event']), extending, check_ms, standard, quality_checks)
                 pending[future] = row['id']
                 changed = True
             if changed:
@@ -329,7 +351,7 @@ def consume(job, metadata, *, producer=None, workers=2, extending=True, check_ms
     return job
 
 
-def run_stream(input_file, job, *, workers=2, extending=True, check_ms=1000, timeout=3600, view=False, standard=False):
+def run_stream(input_file, job, *, workers=2, extending=True, check_ms=1000, timeout=3600, view=False, standard=False, quality_checks=False):
     input_file, job = Path(input_file).resolve(), Path(job).resolve()
     if not input_file.is_file():
         raise RuntimeError(f'Нет исходного сюжета: {input_file}')
@@ -348,7 +370,7 @@ def run_stream(input_file, job, *, workers=2, extending=True, check_ms=1000, tim
     env['DOTNET_ROOT'] = str(app.DOTNET.parent)
     env['DOTNET_MULTILEVEL_LOOKUP'] = '0'
     env['DOTNET_PROCESSOR_COUNT'] = str(max(1, workers))
-    metadata = {'version': 1, 'createdAt': time.time(), 'extending': extending, 'checkMs': check_ms, 'searchState': 'running', 'standardChecks': standard}
+    metadata = {'version': 1, 'createdAt': time.time(), 'extending': extending, 'checkMs': check_ms, 'searchState': 'running', 'standardChecks': standard, 'qualityChecks': quality_checks}
     with job_lock(job), (job / 'geogen.log').open('w') as log:
         producer = subprocess.Popen([str(app.DOTNET), str(app.ROOT / 'lib/geogen/GeoGen.MainLauncher.dll'), str(config)],
                                     cwd=job, env=env, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
@@ -361,7 +383,7 @@ def run_stream(input_file, job, *, workers=2, extending=True, check_ms=1000, tim
                 subprocess.Popen([str(app.VIEWER), '--watch', str(job)], env=env, start_new_session=True,
                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             return consume(job, metadata, producer=producer, workers=workers, extending=extending,
-                           check_ms=check_ms, timeout=timeout, standard=standard)
+                           check_ms=check_ms, timeout=timeout, standard=standard, quality_checks=quality_checks)
         finally:
             stop_producer(producer)
 
@@ -384,4 +406,4 @@ def resume(job, *, workers=2, retry_errors=False):
             queue.db.execute("UPDATE tasks SET state='queued',message='',finished=NULL WHERE state IN ('error','timeout')")
             queue.db.commit()
             queue.close()
-        return consume(job, metadata, workers=workers, extending=metadata['extending'], check_ms=metadata['checkMs'], standard=metadata.get('standardChecks', False))
+        return consume(job, metadata, workers=workers, extending=metadata['extending'], check_ms=metadata['checkMs'], standard=metadata.get('standardChecks', False), quality_checks=metadata.get('qualityChecks', False))

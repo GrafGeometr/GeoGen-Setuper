@@ -180,6 +180,15 @@ EqualLineSegments: A, D, D, B - total ranking 1
     status = json.loads(response.stdout)
     if status.get('status') != 'rejected':
         raise RuntimeError('Проверка исходных точек касания завершилась неправильно: ' + str(status))
+    # Truth validation is distinct from construction weakening.
+    validation = subprocess.run([str(EXTENDING),'--validate-file',str(files[0]),'2000','3','1729'],text=True,capture_output=True,timeout=5,check=True)
+    if json.loads(validation.stdout).get('status') != 'sampled-valid':
+        raise RuntimeError('Exact original theorem validation failed.')
+    false_file = output / 'false-theorem.geo'
+    false_file.write_text(files[0].read_text().replace('!EqualLineSegments: A, D, D, B','!EqualLineSegments: A, B, B, C'))
+    validation = subprocess.run([str(EXTENDING),'--validate-file',str(false_file),'2000','3','1729'],text=True,capture_output=True,timeout=5,check=True)
+    if json.loads(validation.stdout).get('status') != 'counterexample':
+        raise RuntimeError('Validator failed to refute a false theorem.')
     run_pipeline(ROOT / 'examples/input_projections.txt', output / 'job', extending=False, timeout=120)
     if not list((output / 'job/geo').glob('*.geo')):
         raise RuntimeError('Пример GeoGen не дал ни одной задачи для конвертации.')
@@ -259,6 +268,10 @@ SymmetryGenerationMode: GenerateBothSymmetricAndAsymmetric
         raise RuntimeError('Completed campaign was modified by resume.')
     if not VIEWER.is_file():
         raise RuntimeError('Не найден launcher Geometry.')
+    diagram = subprocess.run([str(VIEWER),'--check-geo',str(files[0])],text=True,capture_output=True,timeout=30,check=True)
+    diagram_result = json.loads(diagram.stdout)
+    if diagram_result.get('checked') != 1 or diagram_result.get('failures'):
+        raise RuntimeError('Geometry could not evaluate its control diagram headlessly.')
     print('SMOKE OK: GeoGen → JVM-конвертер → .geo; Extending на контрольных примерах; Geometry упакован.')
 
 
@@ -269,7 +282,15 @@ def main():
     run.add_argument('input', type=Path)
     run.add_argument('--output', type=Path, required=True, help='Новый каталог запуска')
     run.add_argument('--no-check', action='store_true')
+    run.add_argument('--quality-checks', action='store_true', help='Проверять истинность на независимых точных картинках')
     run.add_argument('--standard-checks', action='store_true', help='Отсеивать короткие точные угловые/аффинные следствия')
+    run.add_argument('--search-config',type=Path,help='JSON-настройки поиска по числу теорем; ядро C#')
+    run.add_argument('--experimental-relations',action='store_true',help='Ограниченно выбирать построения по совместным связям внутри GeoGen (эксперимент)')
+    run.add_argument('--relation-target',type=float,default=.2)
+    run.add_argument('--relation-proposals',type=int,default=24)
+    run.add_argument('--relation-keep',type=int,default=6)
+    run.add_argument('--relation-seed',type=int,default=17)
+    run.add_argument('--relation-policy',choices=['joint','uniform'],default='joint')
     run.add_argument('--batch', action='store_true', help='Прежний последовательный режим: подборка лучших после завершения поиска')
     run.add_argument('--workers', type=int, default=2, help='Параллельные обработчики находок')
     run.add_argument('--check-ms', type=int, default=1000, help='Лимит одной проверки Extending, мс')
@@ -286,6 +307,22 @@ def main():
     discover.add_argument('--view', action='store_true')
     discover.add_argument('--software', action='store_true')
     commands.add_parser('catalog', help='Показать каталог построений и поддержку исходных конфигураций')
+    for name in ('experimental-relations','experimental-sample'):
+        experiment=commands.add_parser(name,help='Эксперимент: численные совместные связи / выбор начальных построений')
+        experiment.add_argument('input',type=Path)
+        experiment.add_argument('--catalog',type=Path,default=ROOT/'data/construction-catalog.json')
+        experiment.add_argument('--seed',type=int,default=17)
+        experiment.add_argument('--samples',type=int,default=12)
+        if name=='experimental-relations':
+            experiment.add_argument('--pair',nargs=2)
+            experiment.add_argument('--all-pairs',action='store_true')
+            experiment.add_argument('--pair-budget',type=int,default=24)
+        else:
+            experiment.add_argument('--output',type=Path,required=True)
+            experiment.add_argument('--steps',type=int,default=1)
+            experiment.add_argument('--proposal-budget',type=int,default=24)
+            experiment.add_argument('--target-strength',type=float,default=.2)
+            experiment.add_argument('--max-depth',type=int)
     conv = commands.add_parser('convert', help='Подборка ReadableBestTheorems → .geo')
     conv.add_argument('input', type=Path)
     conv.add_argument('output', type=Path)
@@ -304,9 +341,18 @@ def main():
     resume.add_argument('directory', type=Path)
     resume.add_argument('--workers', type=int, default=2)
     resume.add_argument('--retry-errors', action='store_true')
+    resume.add_argument('--recheck', action='store_true', help='Обновить проверяющую сборку кампании и перепроверить сохранённые кандидаты')
     resume.add_argument('--budget', help='Добавочный бюджет поиска для кампании, например 10m')
     resume.add_argument('--search-workers', type=int)
     resume.add_argument('--check-workers', type=int)
+    audit = commands.add_parser('audit', help='Проверить качество готовых задач, сохранив подробный отчёт')
+    audit.add_argument('directory', type=Path)
+    audit.add_argument('--samples', type=int, default=8)
+    audit.add_argument('--milliseconds', type=int, default=2500)
+    audit.add_argument('--workers', type=int, default=2)
+    audit.add_argument('--limit', type=int)
+    audit.add_argument('--diagrams', action='store_true', help='Проверить вычислимость картинок самим Geometry без окна')
+    audit.add_argument('--triangle-domain', choices=['generic','acute'], default='generic')
     commands.add_parser('doctor', help='Проверить комплект и динамические библиотеки')
     args = parser.parse_args()
     if getattr(args, 'workers', 1) < 1 or getattr(args, 'workers', 1) > 64:
@@ -317,7 +363,28 @@ def main():
         value = getattr(args, key, None)
         if value is not None and not 1 <= value <= 32:
             parser.error('--' + key.replace('_', '-') + ' должен быть в диапазоне 1..32')
-    if args.command == 'discover':
+    if args.command in ('experimental-relations','experimental-sample'):
+        from families import Catalog,Story
+        from experimental_relations import analyze,analyze_configuration,sample_prefix
+        if not 8<=args.samples<=32:parser.error('--samples: 8..32')
+        catalog=Catalog.read(args.catalog)
+        story=Story.parse(args.input.read_text(),catalog)
+        if args.command=='experimental-relations':
+            if args.all_pairs and args.pair:parser.error('Choose --pair or --all-pairs')
+            result=analyze_configuration(story,catalog,seed=args.seed,samples=args.samples,pair_budget=args.pair_budget) if args.all_pairs else analyze(story,catalog,args.pair,args.seed,args.samples)
+            print(json.dumps(result,ensure_ascii=False,indent=2))
+        else:
+            if args.output.exists():raise FileExistsError('Каталог эксперимента уже существует')
+            result,trace=sample_prefix(story,catalog,steps=args.steps,proposal_budget=args.proposal_budget,
+                                      target=args.target_strength,seed=args.seed,samples=args.samples,max_depth=args.max_depth)
+            args.output.mkdir(parents=True)
+            (args.output/'source.txt').write_text(story.text())
+            (args.output/'sampled.txt').write_text(result.text())
+            (args.output/'sampling.json').write_text(json.dumps(trace,ensure_ascii=False,indent=2))
+            print(json.dumps(dict(experimental=True,input=str(args.output/'sampled.txt'),
+                                  proposed=sum(s['proposed'] for s in trace['trace']),
+                                  drawn=sum(s['drawn'] for s in trace['trace']),scope=trace['scope']),ensure_ascii=False))
+    elif args.command == 'discover':
         from discovery import create, seconds
         if args.software:
             os.environ['SKIKO_RENDER_API'] = 'SOFTWARE'
@@ -328,24 +395,43 @@ def main():
     elif args.command == 'catalog':
         print((ROOT / 'data/construction-catalog.json').read_text())
     elif args.command == 'run':
+        if args.search_config:
+            if args.experimental_relations:parser.error('--search-config нельзя сочетать с --experimental-relations')
+            import hashlib
+            marker_path=ROOT/'data/native-theorem-search.json'
+            if not marker_path.exists():parser.error('Пересоберите комплект: нет native theorem search')
+            marker=json.loads(marker_path.read_text())
+            dll=ROOT/'lib/geogen/GeoGen.ProblemGenerator.dll'
+            if marker.get('version')!=1 or marker.get('sha256')!=hashlib.sha256(dll.read_bytes()).hexdigest():
+                parser.error('Маркер native theorem search не соответствует DLL')
+            if not args.search_config.is_file():parser.error('Нет файла --search-config')
+            os.environ['GEOGEN_THEOREM_SEARCH_CONFIG']=str(args.search_config.resolve())
+            os.environ['GEOGEN_THEOREM_SEARCH_OUTPUT']=str(args.output.resolve())
+        if args.experimental_relations:
+            from families import Catalog,Story
+            from experimental_relations import configure_worker
+            source=Story.parse(args.input.read_text(),Catalog.read(ROOT/'data/construction-catalog.json'))
+            if source.layout not in ('Triangle','RightTriangle'):parser.error('Experimental sampler: Triangle/RightTriangle only')
+            configure_worker(ROOT,target=args.relation_target,proposals=args.relation_proposals,
+                             keep=args.relation_keep,seed=args.relation_seed,policy=args.relation_policy)
         if args.software:
             os.environ['SKIKO_RENDER_API'] = 'SOFTWARE'
-        if args.batch and args.standard_checks:
-            parser.error('--standard-checks поддержан в потоковом режиме')
+        if args.batch and (args.standard_checks or args.quality_checks):
+            parser.error('--standard-checks/--quality-checks поддержаны в потоковом режиме')
         if args.batch:
             run_pipeline(args.input, args.output, extending=not args.no_check, timeout=args.timeout)
         else:
             from streaming import run_stream
             run_stream(args.input, args.output, workers=args.workers, extending=not args.no_check,
-                       check_ms=args.check_ms, timeout=args.timeout, view=args.view, standard=args.standard_checks)
+                       check_ms=args.check_ms, timeout=args.timeout, view=args.view, standard=args.standard_checks, quality_checks=args.quality_checks)
     elif args.command == 'resume':
         metadata = json.loads((args.directory / 'run-state.json').read_text())
         if metadata.get('kind') == 'campaign':
             from discovery import run, seconds
             run(args.directory, extra_budget=seconds(args.budget) if args.budget else 0,
-                search_workers=args.search_workers, check_workers=args.check_workers, retry_errors=args.retry_errors)
+                search_workers=args.search_workers, check_workers=args.check_workers, retry_errors=args.retry_errors, recheck=args.recheck)
         else:
-            if args.budget or args.search_workers or args.check_workers:
+            if args.budget or args.search_workers or args.check_workers or args.recheck:
                 parser.error('Дополнительный бюджет/работники поиска поддержаны только для кампаний')
             from streaming import resume
             resume(args.directory, workers=args.workers, retry_errors=args.retry_errors)
@@ -373,6 +459,11 @@ def main():
         execute([VIEWER] + ([args.file.resolve()] if args.file else []))
     elif args.command == 'smoke':
         smoke(args.output.resolve())
+    elif args.command == 'audit':
+        if not 1 <= args.samples <= 100 or not 1 <= args.milliseconds <= 3600000 or (args.limit is not None and args.limit < 1):
+            parser.error('Неверные параметры audit')
+        from quality import audit
+        audit(args.directory, EXTENDING, samples=args.samples, milliseconds=args.milliseconds, workers=args.workers, limit=args.limit, triangle_domain=args.triangle_domain, diagrams=args.diagrams)
     elif args.command == 'doctor':
         for file in (JAVA, DOTNET, EXTENDING, VIEWER):
             if not file.exists():

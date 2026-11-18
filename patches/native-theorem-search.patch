@@ -1,0 +1,592 @@
+diff --git a/Source/Library/GeoGen.ProblemGenerator/ProblemGenerator.cs b/Source/Library/GeoGen.ProblemGenerator/ProblemGenerator.cs
+--- a/Source/Library/GeoGen.ProblemGenerator/ProblemGenerator.cs
++++ b/Source/Library/GeoGen.ProblemGenerator/ProblemGenerator.cs
+@@ -18,7 +18,7 @@
+     /// via <see cref="ProblemGeneratorSettings"/>.
+     /// </para>
+     /// </summary>
+-    public class ProblemGenerator : IProblemGenerator
++    public partial class ProblemGenerator : IProblemGenerator
+     {
+         #region Private fields
+ 
+@@ -83,6 +83,10 @@
+         /// <inheritdoc/>
+         public (TheoremMap initialTheorems, IEnumerable<ProblemGeneratorOutput> generationOutputs) Generate(ProblemGeneratorInput input)
+         {
++            var policyPath = Environment.GetEnvironmentVariable("GEOGEN_THEOREM_SEARCH_CONFIG");
++            if (!string.IsNullOrWhiteSpace(policyPath))
++                return GenerateTheoremSearch(input, TheoremSearchSettings.Read(policyPath));
++
+             #region Preparing variables
+ 
+             // Prepare the stack for pictures of configurations that will be extended
+diff --git a/Source/Library/GeoGen.TheoremFinder/TheoremFinder.cs b/Source/Library/GeoGen.TheoremFinder/TheoremFinder.cs
+--- a/Source/Library/GeoGen.TheoremFinder/TheoremFinder.cs
++++ b/Source/Library/GeoGen.TheoremFinder/TheoremFinder.cs
+@@ -65,19 +65,18 @@
+                 // That is valid
+                 .Except(invalidOldTheorems)
+                 // And return possibly new versions of it
++                .Where(theorem => theorem.Type != TheoremType.Incidence &&
++                    theorem.InvolvedObjects.Any(obj => obj is TheoremObjectWithPoints))
+                 .SelectMany(theorem =>
+-                    // If we have an incidence, we don't want to do anything 
+-                    // (it's not needed to state that A lies on line AB)
+-                    theorem.Type == TheoremType.Incidence ? Enumerable.Empty<Theorem>() :
+-                    // Otherwise for each theorem we take its objects
+-                    theorem.InvolvedObjects
+-                        // Find the possible definition changes for each
+-                        // (this includes the option of not changing the definition at all)
+-                        .Select(theoremObject => FindDefinitionChangeOptions(theoremObject, contextualPicture))
+-                        // Combine these definitions in every possible way
+-                        .Combine()
+-                        // For every option create a new theorem
+-                        .Select(objects => new Theorem(theorem.Type, objects)))
++                {
++                    // Point/segment objects cannot be redefined. If no line/circle gains
++                    // another representation, the only product is the old theorem itself.
++                    var options = theorem.InvolvedObjects.Select(obj =>
++                        FindDefinitionChangeOptions(obj, contextualPicture).ToArray()).ToArray();
++                    if (!options.Any(items => items.Length > 1))
++                        return Enumerable.Empty<Theorem>();
++                    return options.Combine().Select(objects => new Theorem(theorem.Type, objects));
++                })
+                     // We might have gotten even old theorems (when all the definition option changes were 
+                     // 'no change'. Also we might have gotten duplicates. This call will solve both problems
+                     .Except(oldTheorems.AllObjects);
+diff --git a/Source/Library/GeoGen.ProblemGenerator/TheoremSearchSettings.cs b/Source/Library/GeoGen.ProblemGenerator/TheoremSearchSettings.cs
+new file mode 100644
+--- /dev/null
++++ b/Source/Library/GeoGen.ProblemGenerator/TheoremSearchSettings.cs
+@@ -0,0 +1,89 @@
++using System.Text.Json;
++using System.Text.Json.Serialization;
++using GeoGen.Core;
++
++namespace GeoGen.ProblemGenerator;
++
++/// <summary>Independent JSON policy. Does not change constructors, finder, or prover.</summary>
++public sealed class TheoremSearchSettings
++{
++    public int Version { get; set; } = 1;
++    public int Seed { get; set; } = 17;
++    public int Pictures { get; set; } = 4;
++    public bool MixedTrianglePictures { get; set; } = true;
++    public double Seconds { get; set; } = 600;
++    public int Proposals { get; set; } = 16;
++    public int Keep { get; set; } = 4;
++    public int ExplorationSlots { get; set; } = 1;
++    public int MaxVisited { get; set; } = 50000;
++    public int MaxEvaluated { get; set; } = int.MaxValue;
++    public int LogEveryExpanded { get; set; } = 20;
++    public string Policy { get; set; } = "density";
++    public string Scope { get; set; } = "all";
++    public int RecentPoints { get; set; } = 3;
++    public double PointExponent { get; set; } = 1;
++    public double PointOffset { get; set; } = 0;
++    public double LocalTheoremWeight { get; set; } = 1;
++    public Dictionary<TheoremType, double> TypeWeights { get; set; } = new();
++    public TheoremSearchPhase[] Phases { get; set; } = new[] { new TheoremSearchPhase() };
++    public int EmitFromDepth { get; set; } = 1;
++    public bool RequireNonLocalTheorem { get; set; } = false;
++    public string TraceFile { get; set; }
++    public string CandidatesFile { get; set; }
++
++    public static JsonSerializerOptions JsonOptions => new()
++    {
++        PropertyNameCaseInsensitive = true, WriteIndented = false,
++        Converters = { new JsonStringEnumConverter() }
++    };
++
++    public static TheoremSearchSettings Read(string path)
++    {
++        var settings = JsonSerializer.Deserialize<TheoremSearchSettings>(File.ReadAllText(path), JsonOptions)
++            ?? throw new ArgumentException("Empty theorem search configuration");
++        settings.Validate();
++        var output = Environment.GetEnvironmentVariable("GEOGEN_THEOREM_SEARCH_OUTPUT");
++        if (!string.IsNullOrEmpty(output))
++        {
++            settings.TraceFile ??= Path.Combine(output, "search-trace.jsonl");
++            settings.CandidatesFile ??= Path.Combine(output, "search-candidates.jsonl");
++            Directory.CreateDirectory(output);
++            File.WriteAllText(Path.Combine(output, "search-settings.json"), JsonSerializer.Serialize(settings, JsonOptions));
++        }
++        return settings;
++    }
++
++    public void Validate()
++    {
++        if (Pictures < 2 || Pictures > 32 || Version != 1 || !double.IsFinite(Seconds) || Seconds <= 0 || Proposals < 1 || Proposals > 512 ||
++            Keep < 1 || Keep > Proposals || ExplorationSlots < 0 || ExplorationSlots > Keep ||
++            MaxVisited < 1 || MaxEvaluated < 1 || LogEveryExpanded < 1 || RecentPoints < 1 || EmitFromDepth < 1 ||
++            !double.IsFinite(PointExponent) || PointExponent < 0 || !double.IsFinite(PointOffset) || PointOffset < 0 ||
++            !double.IsFinite(LocalTheoremWeight) || LocalTheoremWeight < 0 ||
++            (Policy != "density" && Policy != "uniform") ||
++            !new[] { "all", "recent", "newest", "weakest" }.Contains(Scope) ||
++            TypeWeights.Any(p => !Enum.IsDefined(p.Key) || !double.IsFinite(p.Value) || p.Value < 0) ||
++            Phases == null || Phases.Length == 0)
++            throw new ArgumentException("Invalid theorem search settings");
++        foreach (var phase in Phases)
++            if (!double.IsFinite(phase.TargetRatio) || phase.TargetRatio < 0 ||
++                (phase.TargetDensity.HasValue && (!double.IsFinite(phase.TargetDensity.Value) || phase.TargetDensity < 0)) ||
++                !double.IsFinite(phase.DensityWeight) || phase.DensityWeight < 0 ||
++                !double.IsFinite(phase.NewPointWeight) || phase.NewPointWeight < 0 ||
++                !double.IsFinite(phase.NewPointTarget) || phase.NewPointTarget < 0 ||
++                !double.IsFinite(phase.NewPointScale) || phase.NewPointScale <= 0)
++                throw new ArgumentException("Invalid theorem search phase");
++    }
++
++    public TheoremSearchPhase Phase(int depth) => Phases[Math.Min(Math.Max(depth - 1, 0), Phases.Length - 1)];
++}
++
++public sealed class TheoremSearchPhase
++{
++    public double TargetRatio { get; set; } = 1;
++    public double? TargetDensity { get; set; }
++    public double DensityWeight { get; set; } = 1;
++    public double NewPointWeight { get; set; } = 0;
++    public double NewPointTarget { get; set; } = 1;
++    public double NewPointScale { get; set; } = 4;
++}
+diff --git a/Source/Library/GeoGen.ProblemGenerator/TheoremSearchMetrics.cs b/Source/Library/GeoGen.ProblemGenerator/TheoremSearchMetrics.cs
+new file mode 100644
+--- /dev/null
++++ b/Source/Library/GeoGen.ProblemGenerator/TheoremSearchMetrics.cs
+@@ -0,0 +1,102 @@
++using System.Numerics;
++using GeoGen.Core;
++
++namespace GeoGen.ProblemGenerator;
++
++public sealed class TheoremSearchMetrics
++{
++    public int Points { get; private set; }
++    public int RawTheorems { get; private set; }
++    public double WeightedTheorems { get; private set; }
++    public double Density { get; private set; }
++    public double NewPointDegree { get; private set; }
++    public double NewPointOuterDegree { get; private set; }
++    public int ZeroDegreePoints { get; private set; }
++    public double[] Degrees { get; private set; }
++
++    /// <summary>Each theorem contributes once to the count and once to each participating point.
++    /// Point arguments of explicit lines/circles are included; ancestors of point objects are not.</summary>
++    public static TheoremSearchMetrics Measure(Configuration configuration, IEnumerable<Theorem> theorems,
++        TheoremSearchSettings settings)
++    {
++        var masks = new Dictionary<ConfigurationObject, ulong>();
++        var pointCount = 0;
++        foreach (var obj in configuration.AllObjects.Where(o => o is LooseConfigurationObject)
++            .Concat(configuration.ConstructedObjects))
++        {
++            if (obj.ObjectType == ConfigurationObjectType.Point)
++            {
++                if (pointCount == 63) throw new ArgumentException("Theorem search supports up to 63 named points");
++                masks[obj] = 1UL << pointCount++;
++            }
++            else if (obj is ConstructedConfigurationObject constructed)
++            {
++                ulong mask = 0;
++                foreach (var arg in constructed.PassedArguments.FlattenedList) mask |= masks[arg];
++                masks[obj] = mask;
++            }
++        }
++        var last = configuration.ConstructedObjects.LastOrDefault();
++        var lastMask = last != null ? masks[last] : 0;
++        ulong argumentMask = 0;
++        if (last != null)
++            foreach (var arg in last.PassedArguments.FlattenedList) argumentMask |= masks[arg];
++        var countScope = settings.Scope == "all" ? ulong.MaxValue :
++            settings.Scope == "newest" ? lastMask :
++            ((1UL << Math.Min(pointCount, settings.RecentPoints)) - 1) << Math.Max(0, pointCount - settings.RecentPoints);
++        var result = new TheoremSearchMetrics { Points = pointCount, Degrees = new double[pointCount] };
++        // Finder maps may repeat equivalent statements; metric must not count duplicates.
++        var distinct = new HashSet<Theorem>();
++        foreach (var theorem in theorems)
++        {
++            if (!distinct.Add(theorem)) continue;
++            result.RawTheorems++;
++            ulong mask = 0;
++            foreach (var obj in theorem.GetInnerConfigurationObjects()) mask |= masks[obj];
++            var weight = settings.TypeWeights.TryGetValue(theorem.Type, out var configured) ? configured : 1;
++            if (settings.LocalTheoremWeight != 1 && IsLocal(theorem)) weight *= settings.LocalTheoremWeight;
++            if ((mask & countScope) != 0) result.WeightedTheorems += weight;
++            if ((mask & lastMask) != 0)
++            {
++                result.NewPointDegree += weight;
++                if ((mask & ~(argumentMask | lastMask)) != 0) result.NewPointOuterDegree += weight;
++            }
++            while (mask != 0)
++            {
++                var i = BitOperations.TrailingZeroCount(mask);
++                result.Degrees[i] += weight;
++                mask &= mask - 1;
++            }
++        }
++        result.ZeroDegreePoints = result.Degrees.Count(d => d == 0);
++        var denominator = settings.Scope == "all" ? pointCount : settings.Scope == "newest" ? 1 : Math.Min(pointCount, settings.RecentPoints);
++        result.Density = result.WeightedTheorems / Math.Pow(Math.Max(1, denominator + settings.PointOffset), settings.PointExponent);
++        if (settings.Scope == "weakest")
++        {
++            var sorted = result.Degrees.OrderBy(x => x).Take(settings.RecentPoints).ToArray();
++            result.Density = sorted.Average();
++        }
++        return result;
++    }
++
++    // Purely syntactic switch, not a prover: the statement fits in one construction and its direct inputs.
++    public static bool IsLocal(Theorem theorem)
++    {
++        var objects = theorem.GetInnerConfigurationObjects();
++        foreach (var obj in objects)
++            if (obj is ConstructedConfigurationObject constructed)
++            {
++                var arguments = constructed.PassedArguments.FlattenedList;
++                if (objects.All(other => other.Equals(obj) || arguments.Contains(other))) return true;
++            }
++        return false;
++    }
++
++    public double Cost(TheoremSearchSettings settings, double initialDensity, int depth)
++    {
++        var phase = settings.Phase(depth);
++        var target = phase.TargetDensity ?? initialDensity * phase.TargetRatio;
++        return phase.DensityWeight * Math.Abs(Math.Log((Density + 0.5) / (target + 0.5))) +
++            phase.NewPointWeight * Math.Abs(NewPointDegree - phase.NewPointTarget) / phase.NewPointScale;
++    }
++}
+diff --git a/Source/Library/GeoGen.ProblemGenerator/ProblemGenerator.TheoremSearch.cs b/Source/Library/GeoGen.ProblemGenerator/ProblemGenerator.TheoremSearch.cs
+new file mode 100644
+--- /dev/null
++++ b/Source/Library/GeoGen.ProblemGenerator/ProblemGenerator.TheoremSearch.cs
+@@ -0,0 +1,214 @@
++using System.Diagnostics;
++using System.Text.Json;
++using GeoGen.ConfigurationGenerator;
++using GeoGen.Constructor;
++using GeoGen.Core;
++
++namespace GeoGen.ProblemGenerator;
++
++public partial class ProblemGenerator
++{
++    private sealed class SearchNode
++    {
++        public GeneratedConfiguration Configuration;
++        public PicturesOfConfiguration Pictures;
++        public ContextualPicture Context;
++        public TheoremMap All, Old, New;
++        public TheoremSearchMetrics Metrics;
++        public double Cost;
++    }
++
++    private sealed class SearchCounters
++    {
++        public long Attempts, Built, Evaluated, Invalid, Duplicate, Expanded, Retained, Emitted, Restarts, Epochs;
++        public double ConstructMs, ContextMs, FinderMs, MetricMs, SamplingMs;
++    }
++
++    /// <summary>Bounded sibling competition AFTER construction and theorem discovery. Entire hot loop is C#.</summary>
++    public (TheoremMap initialTheorems, IEnumerable<ProblemGeneratorOutput> generationOutputs)
++        GenerateTheoremSearch(ProblemGeneratorInput input, TheoremSearchSettings policy)
++    {
++        policy.Validate();
++        if (input.InitialConfiguration.LooseObjects.Any(o => o.ObjectType != ConfigurationObjectType.Point))
++            throw new ArgumentException("Theorem search requires point loose objects");
++        if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("GEOGEN_RELATION_WORKER")))
++            throw new ArgumentException("Cannot combine native theorem search with Python relation sampling");
++        var clock = Stopwatch.StartNew();
++        var counters = new SearchCounters();
++        var tick = Stopwatch.GetTimestamp();
++        var geometryRandom = new Random(policy.Seed ^ 0x517cc1b7);
++        var (pictures, data) = policy.MixedTrianglePictures && input.InitialConfiguration.LooseObjectsHolder.Layout == LooseObjectLayout.Triangle
++            ? _constructor.Construct(input.InitialConfiguration, policy.Pictures, () => new GeoGen.AnalyticGeometry.IAnalyticObject[]
++                { new GeoGen.AnalyticGeometry.Point(0, 0), new GeoGen.AnalyticGeometry.Point(1, 0),
++                  new GeoGen.AnalyticGeometry.Point(geometryRandom.NextDouble() * 1.8 - .4, .3 + geometryRandom.NextDouble() * 1.5) })
++            : _constructor.ConstructWithUniformLayout(input.InitialConfiguration, policy.Pictures);
++        counters.ConstructMs += Stopwatch.GetElapsedTime(tick).TotalMilliseconds;
++        if (data.InconstructibleObject != null || data.Duplicates != default)
++            throw new InitializationException("Initial theorem search configuration is not constructible or contains duplicates");
++        tick = Stopwatch.GetTimestamp();
++        var context = new ContextualPicture(pictures);
++        counters.ContextMs += Stopwatch.GetElapsedTime(tick).TotalMilliseconds;
++        tick = Stopwatch.GetTimestamp();
++        var initial = _finder.FindAllTheorems(context);
++        counters.FinderMs += Stopwatch.GetElapsedTime(tick).TotalMilliseconds;
++        tick = Stopwatch.GetTimestamp();
++        var rootMetrics = TheoremSearchMetrics.Measure(input.InitialConfiguration, initial.AllObjects, policy);
++        counters.MetricMs += Stopwatch.GetElapsedTime(tick).TotalMilliseconds;
++        var root = new SearchNode { Configuration = new GeneratedConfiguration(input.InitialConfiguration),
++            Pictures = pictures, Context = context, All = initial, Metrics = rootMetrics };
++        var rng = new Random(policy.Seed);
++        var operations = input.Constructions.OrderBy(c => c.Name, StringComparer.Ordinal).ToArray();
++        var mappings = input.InitialConfiguration.LooseObjectsHolder.GetIsomorphicMappings()
++            .Where(mapping => input.InitialConfiguration.ConstructedObjects.All(o =>
++                input.InitialConfiguration.ConstructedObjectsSet.Contains(o.Remap(mapping))) &&
++                input.HiddenPoints.All(o => input.HiddenPoints.Contains(o.Remap(mapping)))).ToArray();
++        var visited = new HashSet<Configuration>();
++        var work = new Stack<SearchNode>();
++        work.Push(root);
++        return (initial, Iterate());
++
++        IEnumerable<ProblemGeneratorOutput> Iterate()
++        {
++            using var trace = Open(policy.TraceFile);
++            using var candidates = Open(policy.CandidatesFile);
++            Write(trace, new { kind = "start", version = 1, policy, pictures = policy.Pictures,
++                initial = rootMetrics, initialConfiguration = Format(input.InitialConfiguration),
++                runtime = Environment.Version.ToString(), cpuCount = Environment.ProcessorCount });
++            var emptyRestarts = 0;
++            try
++            {
++                while (clock.Elapsed.TotalSeconds < policy.Seconds && counters.Evaluated < policy.MaxEvaluated)
++                {
++                    if (work.Count == 0)
++                    {
++                        counters.Restarts++;
++                        if (++emptyRestarts > 200) break;
++                        work.Push(root);
++                    }
++                    var parent = work.Pop();
++                    if (parent.Configuration.IterationIndex >= input.NumberOfIterations) continue;
++                    counters.Expanded++;
++                    tick = Stopwatch.GetTimestamp();
++                    var proposed = Propose(parent.Configuration);
++                    counters.SamplingMs += Stopwatch.GetElapsedTime(tick).TotalMilliseconds;
++                    var children = new List<SearchNode>(proposed.Count);
++                    foreach (var obj in proposed)
++                    {
++                        if (clock.Elapsed.TotalSeconds >= policy.Seconds || counters.Evaluated >= policy.MaxEvaluated) break;
++                        var configuration = new GeneratedConfiguration(parent.Configuration, obj, parent.Configuration.IterationIndex + 1);
++                        if (!visited.Add(configuration)) { counters.Duplicate++; continue; }
++                        foreach (var mapping in mappings)
++                            visited.Add(new Configuration(configuration.LooseObjectsHolder,
++                                configuration.ConstructedObjects.Select(o => (ConstructedConfigurationObject)o.Remap(mapping)).ToArray()));
++                        if (visited.Count > policy.MaxVisited) { visited.Clear(); counters.Epochs++; }
++                        SearchNode child;
++                        try
++                        {
++                            tick = Stopwatch.GetTimestamp();
++                            var (childPictures, constructionData) = _constructor.ConstructByCloning(parent.Pictures, configuration);
++                            counters.ConstructMs += Stopwatch.GetElapsedTime(tick).TotalMilliseconds;
++                            if (childPictures == null || constructionData.InconstructibleObject != null || constructionData.Duplicates != default)
++                            { counters.Invalid++; continue; }
++                            counters.Built++;
++                            tick = Stopwatch.GetTimestamp();
++                            var childContext = parent.Context.ConstructByCloning(childPictures);
++                            counters.ContextMs += Stopwatch.GetElapsedTime(tick).TotalMilliseconds;
++                            tick = Stopwatch.GetTimestamp();
++                            var newTheorems = _finder.FindNewTheorems(childContext, parent.All, out var invalid);
++                            var oldTheorems = invalid.Length == 0 ? parent.All : new TheoremMap(parent.All.AllObjects.Except(invalid));
++                            var all = new TheoremMap(oldTheorems.AllObjects.Concat(newTheorems.AllObjects).Distinct());
++                            counters.FinderMs += Stopwatch.GetElapsedTime(tick).TotalMilliseconds;
++                            tick = Stopwatch.GetTimestamp();
++                            var metrics = TheoremSearchMetrics.Measure(configuration, all.AllObjects, policy);
++                            var cost = metrics.Cost(policy, rootMetrics.Density, configuration.IterationIndex);
++                            counters.MetricMs += Stopwatch.GetElapsedTime(tick).TotalMilliseconds;
++                            child = new SearchNode { Configuration = configuration, Pictures = childPictures, Context = childContext,
++                                Old = oldTheorems, New = newTheorems, All = all, Metrics = metrics, Cost = cost };
++                            counters.Evaluated++;
++                        }
++                        catch (InconsistentPicturesException) { counters.Invalid++; continue; }
++                        children.Add(child);
++                    }
++                    if (children.Count == 0) continue;
++                    emptyRestarts = 0;
++                    // Uniform uses the same constructor/finder and bounds; only ranking is disabled.
++                    if (policy.Policy == "density") children.Sort((a, b) => a.Cost.CompareTo(b.Cost));
++                    var selected = new List<SearchNode>(policy.Keep);
++                    var greedy = Math.Min(children.Count, policy.Keep - policy.ExplorationSlots);
++                    for (var i = 0; i < greedy; i++) selected.Add(children[i]);
++                    var rest = children.Skip(greedy).ToList();
++                    while (selected.Count < policy.Keep && rest.Count > 0)
++                    { var index = rng.Next(rest.Count); selected.Add(rest[index]); rest.RemoveAt(index); }
++                    counters.Retained += selected.Count;
++                    // Push worst first: best child is expanded next; siblings remain available.
++                    for (var i = selected.Count - 1; i >= 0; i--) work.Push(selected[i]);
++                    if (counters.Expanded % policy.LogEveryExpanded == 0)
++                        Write(trace, new { kind = "progress", seconds = clock.Elapsed.TotalSeconds,
++                            counters, frontier = work.Count, visited = visited.Count,
++                            parentDepth = parent.Configuration.IterationIndex,
++                            selected = selected.Select(n => new { depth = n.Configuration.IterationIndex, n.Cost, n.Metrics }) });
++                    foreach (var child in selected)
++                    {
++                        if (child.Configuration.IterationIndex < policy.EmitFromDepth || child.New.AllObjects.Count == 0) continue;
++                        if (policy.RequireNonLocalTheorem && child.Metrics.NewPointOuterDegree == 0) continue;
++                        if (input.SymmetryGenerationMode == SymmetryGenerationMode.GenerateOnlySymmetric && !child.Configuration.IsSymmetric()) continue;
++                        if (input.SymmetryGenerationMode == SymmetryGenerationMode.GenerateOnlyFullySymmetric && !child.Configuration.IsFullySymmetric()) continue;
++                        counters.Emitted++;
++                        Write(candidates, new { kind = "candidate", sequence = counters.Emitted,
++                            seconds = clock.Elapsed.TotalSeconds, depth = child.Configuration.IterationIndex,
++                            child.Cost, child.Metrics, configuration = Format(child.Configuration),
++                            theorems = child.New.AllObjects.Select(t => new OutputFormatter(child.Configuration.AllObjects).FormatTheorem(t)) });
++                        yield return new ProblemGeneratorOutput(child.Configuration, child.Context, child.Old, child.New);
++                    }
++                }
++            }
++            finally
++            {
++                Write(trace, new { kind = "finish", seconds = clock.Elapsed.TotalSeconds, counters,
++                    frontier = work.Count, visited = visited.Count,
++                    cpuMs = Process.GetCurrentProcess().TotalProcessorTime.TotalMilliseconds,
++                    peakWorkingSet = Process.GetCurrentProcess().PeakWorkingSet64 });
++            }
++        }
++
++        List<ConstructedConfigurationObject> Propose(GeneratedConfiguration parent)
++        {
++            var available = parent.AllObjects.Where(o => !input.HiddenPoints.Contains(o)).GroupBy(o => o.ObjectType)
++                .ToDictionary(g => g.Key, g => g.ToArray());
++            var initialCounts = input.InitialConfiguration.AllObjects.GroupBy(o => o.ObjectType).ToDictionary(g => g.Key, g => g.Count());
++            var eligible = operations.Where(c =>
++                parent.ObjectMap.GetObjectsForKeys(c.OutputType).Count() - initialCounts.GetValueOrDefault(c.OutputType) < input.MaximalNumbersOfObjectsToAdd[c.OutputType] &&
++                c.Signature.ObjectTypesToNeededCount.All(p => available.TryGetValue(p.Key, out var pool) && pool.Length >= p.Value)).ToArray();
++            var result = new List<ConstructedConfigurationObject>(policy.Proposals);
++            if (eligible.Length == 0) return result;
++            var seen = new HashSet<ConstructedConfigurationObject>();
++            for (var attempt = 0; result.Count < policy.Proposals && attempt < policy.Proposals * 12; attempt++)
++            {
++                counters.Attempts++;
++                var operation = eligible[rng.Next(eligible.Length)];
++                var args = new ConfigurationObject[operation.Signature.ObjectTypes.Count];
++                var used = new HashSet<ConfigurationObject>();
++                for (var i = 0; i < args.Length; i++)
++                {
++                    var pool = available[operation.Signature.ObjectTypes[i]];
++                    ConfigurationObject arg;
++                    do { arg = pool[rng.Next(pool.Length)]; } while (!used.Add(arg));
++                    args[i] = arg;
++                }
++                var obj = new ConstructedConfigurationObject(operation, operation.Signature.Match(args));
++                if (!parent.ConstructedObjectsSet.Contains(obj) && seen.Add(obj)) result.Add(obj);
++            }
++            return result;
++        }
++    }
++
++    private static StreamWriter Open(string path)
++    {
++        if (string.IsNullOrWhiteSpace(path)) return null;
++        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
++        return new StreamWriter(path, append: false) { AutoFlush = true };
++    }
++    private static void Write(StreamWriter writer, object value)
++        => writer?.WriteLine(JsonSerializer.Serialize(value, new JsonSerializerOptions(TheoremSearchSettings.JsonOptions) { IncludeFields = true }));
++    private static string Format(Configuration configuration) => new OutputFormatter(configuration.AllObjects).FormatConfiguration(configuration);
++}
+diff --git a/Source/Tests/UnitTests/GeoGen.ConfigurationGenerator.Tests/TheoremSearchTest.cs b/Source/Tests/UnitTests/GeoGen.ConfigurationGenerator.Tests/TheoremSearchTest.cs
+new file mode 100644
+--- /dev/null
++++ b/Source/Tests/UnitTests/GeoGen.ConfigurationGenerator.Tests/TheoremSearchTest.cs
+@@ -0,0 +1,110 @@
++using GeoGen.Core;
++using GeoGen.Constructor;
++using GeoGen.Infrastructure;
++using GeoGen.ProblemGenerator;
++using GeoGen.TheoremFinder;
++using GeoGen.Utilities;
++using Ninject;
++using NUnit.Framework;
++using static GeoGen.Core.ConfigurationObjectType;
++using static GeoGen.Core.PredefinedConstructions;
++
++namespace GeoGen.ConfigurationGenerator.Tests;
++
++[TestFixture]
++public class TheoremSearchTest
++{
++    private static (Configuration config, LooseConfigurationObject a, LooseConfigurationObject b, LooseConfigurationObject c, ConstructedConfigurationObject d) Triangle()
++    {
++        var a = new LooseConfigurationObject(Point); var b = new LooseConfigurationObject(Point); var c = new LooseConfigurationObject(Point);
++        var d = new ConstructedConfigurationObject(Midpoint, a, b);
++        return (Configuration.DeriveFromObjects(LooseObjectLayout.Triangle, a, b, c, d), a, b, c, d);
++    }
++
++    [Test]
++    public void Density_and_new_point_degree_count_actual_theorems()
++    {
++        var (config,a,b,c,d)=Triangle();
++        var theorem = new Theorem(TheoremType.CollinearPoints,a,b,d);
++        var metric=TheoremSearchMetrics.Measure(config,new[]{theorem,theorem},new TheoremSearchSettings());
++        Assert.That(metric.Points,Is.EqualTo(4)); Assert.That(metric.RawTheorems,Is.EqualTo(1));
++        Assert.That(metric.Density,Is.EqualTo(.25));Assert.That(metric.NewPointDegree,Is.EqualTo(1));
++        Assert.That(metric.NewPointOuterDegree,Is.EqualTo(0));Assert.That(metric.Degrees,Is.EqualTo(new double[]{1,1,0,1}));
++    }
++    [Test]
++    public void A_theorem_outside_direct_arguments_is_counted_separately()
++    {
++        var (config,a,b,c,d)=Triangle();
++        var metric=TheoremSearchMetrics.Measure(config,new[]{new Theorem(TheoremType.CollinearPoints,a,c,d)},new TheoremSearchSettings());
++        Assert.That(metric.NewPointOuterDegree,Is.EqualTo(1));
++    }
++    [Test]
++    public void Formula_type_weights_local_weights_and_scopes_are_configurable()
++    {
++        var (config,a,b,c,d)=Triangle();var t=new Theorem(TheoremType.CollinearPoints,a,b,d);
++        var policy=new TheoremSearchSettings { LocalTheoremWeight=.5,PointExponent=2,TypeWeights=new(){{TheoremType.CollinearPoints,2}} };
++        Assert.That(TheoremSearchMetrics.Measure(config,new[]{t},policy).Density,Is.EqualTo(1.0/16));
++        policy.Scope="newest";Assert.That(TheoremSearchMetrics.Measure(config,new[]{t},policy).Density,Is.EqualTo(1));
++        policy.Scope="weakest";policy.RecentPoints=1;Assert.That(TheoremSearchMetrics.Measure(config,new[]{t},policy).Density,Is.EqualTo(0));
++    }
++    [Test]
++    public void Targets_change_by_depth_without_changing_search_code()
++    {
++        var policy=new TheoremSearchSettings { Phases=new[]{new TheoremSearchPhase{TargetDensity=.25},new TheoremSearchPhase{TargetDensity=0}} };
++        var (config,a,b,c,d)=Triangle();var metric=TheoremSearchMetrics.Measure(config,new[]{new Theorem(TheoremType.CollinearPoints,a,b,d)},policy);
++        Assert.That(metric.Cost(policy,1,1),Is.EqualTo(0));Assert.That(metric.Cost(policy,1,2),Is.GreaterThan(0));
++        Assert.That(policy.Phase(99),Is.SameAs(policy.Phases[1]));
++    }
++    [TestCase(-1,4)] [TestCase(4,5)] [TestCase(0,1)]
++    public void Invalid_budgets_fail_before_search(int proposals,int keep)
++        => Assert.Throws<ArgumentException>(()=>new TheoremSearchSettings{Proposals=proposals,Keep=keep}.Validate());
++
++    private static (GeoGen.ProblemGenerator.ProblemGenerator generator, ITheoremFinder finder, IKernel kernel) Services()
++    {
++        var kernel=NinjectUtilities.CreateKernel();kernel.AddConstructor();
++        kernel.AddTheoremFinder(new TheoremFindingSettings(new[]{TheoremType.CollinearPoints,TheoremType.ConcyclicPoints,
++            TheoremType.PerpendicularLines,TheoremType.ParallelLines,TheoremType.EqualLineSegments},null,null));
++        kernel.AddConfigurationGenerator(new GenerationSettings(ConfigurationFilterType.MemoryEfficient));
++        var finder=kernel.Get<ITheoremFinder>();
++        return (new GeoGen.ProblemGenerator.ProblemGenerator(new ProblemGeneratorSettings(3),kernel.Get<IConfigurationGenerator>(),
++            kernel.Get<IGeometryConstructor>(),finder,new EmptyGeometryFailureTracer()),finder,kernel);
++    }
++    private static ProblemGeneratorInput Input(bool hidden=false)
++    {
++        var (_,a,b,c,_)=Triangle();var config=Configuration.DeriveFromObjects(LooseObjectLayout.Triangle,a,b,c);
++        return new ProblemGeneratorInput(config,new Construction[]{Midpoint,ComposedConstructions.Orthocenter}.ToReadOnlyHashSet(),2,
++            new Dictionary<ConfigurationObjectType,int>{{Point,2},{Line,0},{Circle,0}},SymmetryGenerationMode.GenerateBothSymmetricAndAsymmetric,
++            hidden?new[]{c}:Array.Empty<ConfigurationObject>());
++    }
++    [Test]
++    public void Native_search_reuses_the_same_theorems_as_full_finder_and_respects_limits()
++    {
++        var (generator,finder,kernel)=Services();using(kernel)
++        {
++            var input=Input();var policy=new TheoremSearchSettings { Seconds=10,MaxEvaluated=30,Proposals=12,Keep=3,RequireNonLocalTheorem=false };
++            var outputs=generator.GenerateTheoremSearch(input,policy).generationOutputs.ToArray();
++            Assert.That(outputs,Is.Not.Empty);
++            foreach(var output in outputs)
++            {
++                Assert.That(output.Configuration.IterationIndex,Is.LessThanOrEqualTo(2));
++                var incremental=output.OldTheorems.AllObjects.Concat(output.NewTheorems.AllObjects).ToHashSet();
++                Assert.That(incremental.SetEquals(finder.FindAllTheorems(output.ContextualPicture).AllObjects),Is.True);
++            }
++            Assert.That(outputs.Select(o=>o.OldTheorems.AllObjects.Count+o.NewTheorems.AllObjects.Count).Distinct().Count(),Is.GreaterThan(1));
++        }
++    }
++    [Test]
++    public void Seed_reproduces_actions_and_hidden_points_are_not_used()
++    {
++        var (generator,_,kernel)=Services();using(kernel)
++        {
++            var input=Input(hidden:true);var policy=new TheoremSearchSettings { Seconds=10,MaxEvaluated=10,Proposals=8,Keep=2,RequireNonLocalTheorem=false };
++            string[] Run()=>generator.GenerateTheoremSearch(input,policy).generationOutputs.Select(o=>new OutputFormatter(o.Configuration.AllObjects).FormatConfiguration(o.Configuration)).ToArray();
++            Assert.That(Run(),Is.EqualTo(Run()));
++            var outputs=generator.GenerateTheoremSearch(input,policy).generationOutputs.ToArray();
++            foreach(var output in outputs)
++                foreach(var obj in output.Configuration.ConstructedObjects)
++                    Assert.That(obj.PassedArguments.FlattenedList.Any(input.HiddenPoints.Contains),Is.False);
++        }
++    }
++}

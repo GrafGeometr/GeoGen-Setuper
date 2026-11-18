@@ -1,0 +1,12 @@
+diff --git a/GeoGenIntegration/src/nativeMain/kotlin/Main.kt b/GeoGenIntegration/src/nativeMain/kotlin/Main.kt
+--- a/GeoGenIntegration/src/nativeMain/kotlin/Main.kt
++++ b/GeoGenIntegration/src/nativeMain/kotlin/Main.kt
+@@ -73,7 +73,7 @@
+                 ${names[0]} = #(20+60i)
+                 ${names[1]} = #(60-40i)
+                 ${names[2]} = #(-60-40i)
+-                ${names[3]} = #(-30+40i)
++                ${names[3]} = #(-37+43i)
+                 [orange] [fill] polygon(${names.joinToString()})
+             """.trimIndent()
+         }

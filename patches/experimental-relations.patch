@@ -1,0 +1,112 @@
+diff --git a/Source/Library/GeoGen.ConfigurationGenerator/ConfigurationGenerator.cs b/Source/Library/GeoGen.ConfigurationGenerator/ConfigurationGenerator.cs
+--- a/Source/Library/GeoGen.ConfigurationGenerator/ConfigurationGenerator.cs
++++ b/Source/Library/GeoGen.ConfigurationGenerator/ConfigurationGenerator.cs
+@@ -100,6 +100,13 @@
+         /// <returns>The enumerator of generated configurations.</returns>
+         private static IEnumerator<GeneratedConfiguration> ExtendConfiguration(GeneratedConfiguration currentConfiguration, ConfigurationGeneratorInput input, IConfigurationFilter filter)
+         {
++            if (ExperimentalRelationSampler.Enabled)
++                return ExperimentalRelationSampler.Sample(currentConfiguration, input)
++                    .Where(obj => !currentConfiguration.ConstructedObjectsSet.Contains(obj))
++                    .Select(obj => new GeneratedConfiguration(currentConfiguration, obj, currentConfiguration.IterationIndex + 1))
++                    .Where(configuration => !filter.ShouldBeExcluded(configuration))
++                    .Where(input.ConfigurationFilter.Invoke).GetEnumerator();
++
+             // Retain all initial definitions and geometry, but exclude hidden points from new arguments.
+             var availableObjects = input.HiddenPoints.Count == 0
+                 ? currentConfiguration.ObjectMap
+@@ -172,4 +179,4 @@
+ 
+         #endregion
+     }
+-}
+\ No newline at end of file
++}
+diff --git a/Source/Library/GeoGen.ConfigurationGenerator/ExperimentalRelationSampler.cs b/Source/Library/GeoGen.ConfigurationGenerator/ExperimentalRelationSampler.cs
+new file mode 100644
+--- /dev/null
++++ b/Source/Library/GeoGen.ConfigurationGenerator/ExperimentalRelationSampler.cs
+@@ -0,0 +1,83 @@
++using System.Diagnostics;
++using System.Text.Json;
++using GeoGen.Core;
++
++namespace GeoGen.ConfigurationGenerator;
++
++/// <summary>Opt-in, bounded sampling before construction. Legacy enumeration is unchanged.</summary>
++internal static class ExperimentalRelationSampler
++{
++    private static Process _worker;
++    private static readonly object Gate = new();
++    internal static bool Enabled => !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("GEOGEN_RELATION_WORKER"));
++
++    private static Process Worker()
++    {
++        if (_worker != null && !_worker.HasExited) return _worker;
++        var start = new ProcessStartInfo(Environment.GetEnvironmentVariable("GEOGEN_RELATION_PYTHON") ?? "python3")
++        {
++            UseShellExecute = false, RedirectStandardInput = true, RedirectStandardOutput = true
++        };
++        start.ArgumentList.Add("-u");
++        start.ArgumentList.Add(Environment.GetEnvironmentVariable("GEOGEN_RELATION_WORKER"));
++        start.ArgumentList.Add("--worker");
++        _worker = Process.Start(start) ?? throw new InvalidOperationException("Cannot start relation sampler");
++        AppDomain.CurrentDomain.ProcessExit += (_, _) => { try { if (!_worker.HasExited) _worker.Kill(true); } catch { } };
++        return _worker;
++    }
++
++    internal static IEnumerable<ConstructedConfigurationObject> Sample(GeneratedConfiguration configuration, ConfigurationGeneratorInput input)
++    {
++        var pointCount = configuration.ObjectMap.GetObjectsForKeys(ConfigurationObjectType.Point).Count()
++            - input.InitialConfiguration.ObjectMap.GetObjectsForKeys(ConfigurationObjectType.Point).Count();
++        if (pointCount >= input.MaximalNumbersOfObjectsToAdd[ConfigurationObjectType.Point])
++            return Array.Empty<ConstructedConfigurationObject>();
++        var objects = configuration.LooseObjects.Concat<ConfigurationObject>(configuration.ConstructedObjects).ToArray();
++        var indices = objects.Select((obj, i) => (obj, i)).ToDictionary(x => x.obj, x => x.i);
++        var operations = input.Constructions.Where(c => c.OutputType == ConfigurationObjectType.Point &&
++            c.Signature.ObjectTypes.All(t => t == ConfigurationObjectType.Point)).ToDictionary(c => c.Name);
++        if (operations.Count == 0) return Array.Empty<ConstructedConfigurationObject>();
++        var request = new
++        {
++            version = 1,
++            layout = configuration.LooseObjectsHolder.Layout.ToString(),
++            roots = configuration.LooseObjects.Count,
++            definitions = configuration.ConstructedObjects.Select(obj => new
++            {
++                operation = obj.Construction.Name,
++                arguments = obj.PassedArguments.FlattenedList.Select(a => indices[a]).ToArray()
++            }).ToArray(),
++            hidden = input.HiddenPoints.Select(p => indices[p]).ToArray(),
++            operations = operations.Keys.OrderBy(n => n).ToArray()
++        };
++        JsonDocument response;
++        lock (Gate)
++        {
++            var worker = Worker();
++            worker.StandardInput.WriteLine(JsonSerializer.Serialize(request));
++            worker.StandardInput.Flush();
++            string line;
++            try { line = worker.StandardOutput.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(15)).GetAwaiter().GetResult(); }
++            catch { try { worker.Kill(true); } catch { } throw; }
++            response = JsonDocument.Parse(line ?? throw new InvalidOperationException("Relation worker ended"));
++        }
++        using (response)
++        {
++            var root = response.RootElement;
++            if (root.TryGetProperty("error", out var error)) throw new InvalidOperationException("Relation sampler: " + error.GetString());
++            Console.Error.WriteLine("RELATION_SAMPLER " + root.GetProperty("statistics").GetRawText());
++            var result = new List<ConstructedConfigurationObject>();
++            foreach (var action in root.GetProperty("actions").EnumerateArray())
++            {
++                if (!operations.TryGetValue(action.GetProperty("operation").GetString(), out var construction))
++                    throw new InvalidOperationException("Relation worker selected an unavailable construction");
++                var args = action.GetProperty("arguments").EnumerateArray().Select(x => x.GetInt32()).ToArray();
++                if (args.Length != construction.Signature.ObjectTypes.Count || args.Distinct().Count() != args.Length ||
++                    args.Any(i => i < 0 || i >= objects.Length || objects[i].ObjectType != ConfigurationObjectType.Point || input.HiddenPoints.Contains(objects[i])))
++                    throw new InvalidOperationException("Invalid relation sampler arguments");
++                result.Add(new ConstructedConfigurationObject(construction, construction.Signature.Match(args.Select(i => objects[i]).ToArray())));
++            }
++            return result.Distinct().ToArray();
++        }
++    }
++}

@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "name": "circles",
+  "stories": [
+    "stories/*.txt"
+  ],
+  "allowedConstructions": [
+    "Midpoint",
+    "MidpointOfArc",
+    "MidpointOfOppositeArc",
+    "OppositePointOnCircumcircle",
+    "SecondIntersectionOfCircleAndLineFromPoints",
+    "LineFromPoints",
+    "Circumcircle"
+  ],
+  "includeRelaxations": true,
+  "seed": 1729,
+  "growth": {
+    "maxAddedDefinitions": 2,
+    "variantsPerStory": 8
+  },
+  "search": {
+    "maxDepth": 4,
+    "maxJobs": 32,
+    "sliceSeconds": 4,
+    "maxPaletteSize": 4
+  }
+}

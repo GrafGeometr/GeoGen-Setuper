@@ -30,8 +30,8 @@ def seconds(text):
 def backend_key(catalog):
     from standard_reasoning import VERSION as reasoning_version
     build = app.ROOT / 'BUILD.json'
-    return digest({'catalog': catalog.data, 'build': build.read_text() if build.exists() else '', 'reasoning': reasoning_version,
-                   'modules': {name: digest((app.ROOT / name).read_text()) for name in ('families.py', 'discovery.py', 'standard_reasoning.py', 'streaming.py') if (app.ROOT / name).exists()}})
+    return digest({'catalog': catalog.data, 'build': build.read_text() if build.exists() else '', 'reasoning': reasoning_version, 'quality': 1,
+                   'modules': {name: digest((app.ROOT / name).read_text()) for name in ('families.py', 'discovery.py', 'standard_reasoning.py', 'streaming.py', 'quality.py') if (app.ROOT / name).exists()}})
 
 
 class CampaignQueue(Queue):
@@ -106,7 +106,7 @@ class CampaignQueue(Queue):
         for job in self.db.execute("SELECT id,plan,elapsed FROM search_jobs WHERE state IN ('completed','limited','failed','interrupted','invalid')"):
             source = direction(json.loads(job['plan']))
             stats = statistics.setdefault(source, [0, 0, 0])
-            ready = self.db.execute("SELECT count(*) FROM tasks WHERE state='ready' AND id LIKE ?", (job['id'] + '__%',)).fetchone()[0]
+            ready = self.db.execute("SELECT COALESCE(sum(COALESCE(q.score,100))/100.0,0) FROM tasks t LEFT JOIN quality_reports q ON q.id=t.id WHERE t.state='ready' AND t.id LIKE ?", (job['id'] + '__%',)).fetchone()[0]
             stats[0] += ready; stats[1] += job['elapsed']; stats[2] += 1
         def score(row):
             source = direction(json.loads(row['plan']))
@@ -141,7 +141,7 @@ def create(family_file, output, *, budget, search_workers=2, check_workers=2, ch
                 'createdAt': time.time(), 'budgetSeconds': budget, 'spentSeconds': 0,
                 'searchWorkers': search_workers, 'checkWorkers': check_workers, 'checkMs': check_ms,
                 'sliceSeconds': family.config['search']['sliceSeconds'], 'backendKey': backend_key(catalog),
-                'familyName': family.config.get('name', Path(family_file).stem)}
+                'qualityChecks': True, 'qualityOptions': dict(samples=family.config['quality']['samples'],milliseconds=family.config['quality']['milliseconds'],triangle_domain=family.config['quality']['triangleDomain']), 'familyName': family.config.get('name', Path(family_file).stem)}
     queue = CampaignQueue(output, catalog)
     try:
         with queue.db:
@@ -155,7 +155,7 @@ def create(family_file, output, *, budget, search_workers=2, check_workers=2, ch
 
 
 def _recover_searches(queue):
-    for row in queue.db.execute("SELECT * FROM search_jobs WHERE state='running'").fetchall():
+    for row in queue.db.execute("SELECT * FROM search_jobs WHERE state IN ('running','preparing')").fetchall():
         # Never kill a reused PID: verify the isolated job's exact settings argument.
         pid = row['pid']
         try:
@@ -177,7 +177,7 @@ def _recover_searches(queue):
         queue.import_events(source)
 
 
-def _start_search(queue, row):
+def _start_search_unchecked(queue, row):
     source = queue.job / 'searches' / row['id']
     source.mkdir()
     for sub in ('events', 'inputs'):
@@ -196,12 +196,31 @@ def _start_search(queue, row):
                                     cwd=source, env=env, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
     finally:
         log.close()
-    with queue.db:
-        queue.db.execute("UPDATE search_jobs SET state='running',pid=?,started=? WHERE id=?", (producer.pid, time.time(), row['id']))
+    try:
+        with queue.db:
+            queue.db.execute("UPDATE search_jobs SET state='running',pid=?,started=? WHERE id=?", (producer.pid, time.time(), row['id']))
+    except BaseException:
+        stop_producer(producer)
+        raise
     return producer, time.monotonic()
 
 
-def run(output, *, extra_budget=0, search_workers=None, check_workers=None, retry_errors=False, view=False, drain_seconds=30):
+def _start_search(queue,row):
+    with queue.db:
+        queue.db.execute("UPDATE search_jobs SET state='preparing' WHERE id=?",(row['id'],))
+    try:
+        return _start_search_unchecked(queue,row)
+    except BaseException:
+        with queue.db:
+            queue.db.execute("UPDATE search_jobs SET state='interrupted' WHERE id=?",(row['id'],))
+        raise
+
+
+def run(output, *, extra_budget=0, search_workers=None, check_workers=None, retry_errors=False, view=False, drain_seconds=30, recheck=False):
+    if not isinstance(extra_budget,(int,float)) or isinstance(extra_budget,bool) or not math.isfinite(extra_budget) or extra_budget < 0:
+        raise ValueError('Неверный добавочный бюджет')
+    if search_workers is not None: integer(search_workers,'search_workers',1,32)
+    if check_workers is not None: integer(check_workers,'check_workers',1,32)
     output = Path(output).resolve()
     catalog = Catalog.read(output / 'family/catalog.json')
     with job_lock(output):
@@ -209,8 +228,11 @@ def run(output, *, extra_budget=0, search_workers=None, check_workers=None, retr
         if metadata.get('kind') != 'campaign' or metadata.get('version') != 1:
             raise ValueError('Неизвестный формат кампании')
         current_catalog = Catalog.read(app.ROOT / 'data/construction-catalog.json')
-        if metadata['backendKey'] != backend_key(current_catalog):
-            raise ValueError('Сборка/проверки изменились. Создайте новую кампанию: старый кэш автоматически не переносится.')
+        changed_backend = metadata['backendKey'] != backend_key(current_catalog)
+        if changed_backend and not recheck:
+            raise ValueError('Сборка/проверки изменились. Для сохранения кампании и повторной проверки результатов используйте resume --recheck.')
+        if recheck and catalog.data != current_catalog.data:
+            raise ValueError('Каталог построений изменился; создайте новую кампанию, чтобы не смешивать разные определения.')
         if extra_budget:
             metadata['budgetSeconds'] += extra_budget
         if search_workers is not None:
@@ -219,6 +241,18 @@ def run(output, *, extra_budget=0, search_workers=None, check_workers=None, retr
             metadata['checkWorkers'] = check_workers
         queue = CampaignQueue(output, catalog)
         _recover_searches(queue)
+        if recheck:
+            archive = output / 'archive' / (metadata['backendKey'][:12]+'-'+str(time.time_ns()))
+            archive.mkdir(parents=True)
+            with sqlite3.connect(archive/'tasks.sqlite') as backup:
+                queue.db.backup(backup)
+            for file in (output/'geo').glob('*.geo'):
+                (archive/'geo').mkdir(exist_ok=True)
+                file.replace(archive/'geo'/file.name)
+            queue.db.execute("UPDATE tasks SET state='queued',message='',geo='',finished=NULL WHERE state!='duplicate' AND json_extract(event,'$.configuration') IS NOT NULL")
+            queue.db.execute('DELETE FROM quality_reports')
+            queue.db.commit()
+            metadata.update(backendKey=backend_key(current_catalog),qualityChecks=True)
         queue.db.execute("UPDATE tasks SET state='queued' WHERE state='processing'")
         if retry_errors:
             queue.db.execute("UPDATE tasks SET state='queued',message='',finished=NULL WHERE state IN ('error','timeout')")
@@ -280,7 +314,7 @@ def run(output, *, extra_budget=0, search_workers=None, check_workers=None, retr
                     row = queue.take()
                     if row is None:
                         break
-                    pending[pool.submit(process_event, output, row['id'], json.loads(row['event']), True, metadata['checkMs'], True)] = row['id']
+                    pending[pool.submit(process_event, output, row['id'], json.loads(row['event']), True, metadata['checkMs'], True, metadata.get('qualityOptions') or True)] = row['id']
                     changed = True
                 metadata.update(spentSeconds=spent + min((search_ended or time.monotonic()) - started, remaining),
                                 phase='searching' if searching else 'draining', searchState='running' if searching else 'stopped')

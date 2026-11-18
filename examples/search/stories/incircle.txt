@@ -1,0 +1,24 @@
+Constructions:
+Midpoint
+Orthocenter
+Circumcenter
+Incenter
+ReflectionInLineFromPoints
+PerpendicularProjectionOnLineFromPoints
+PointReflection
+IntersectionOfLinesFromPoints
+DumptyPoint
+HumptyPoint
+SecondIntersectionOfCircleAndLineFromPoints
+
+Initial configuration:
+Triangle: A, B, C
+D = IncircleTangentPoint(A, B, C)
+E = IncircleTangentPoint(B, A, C)
+F = IncircleTangentPoint(C, A, B)
+
+Iterations: 4
+MaximalPoints: 4
+MaximalLines: 0
+MaximalCircles: 0
+SymmetryGenerationMode: GenerateBothSymmetricAndAsymmetric

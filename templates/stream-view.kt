@@ -20,7 +20,7 @@ import kotlinx.coroutines.launch
 
 private val labels = mapOf("queued" to "Ожидает", "processing" to "Проверяется", "ready" to "Готово",
     "unchecked" to "Без проверки", "rejected" to "Отбраковано", "timeout" to "Таймаут",
-    "error" to "Ошибка", "standard" to "Стандартный вывод", "duplicate" to "Повтор", "searching" to "Идёт поиск",
+    "review" to "Нужна проверка", "error" to "Ошибка", "standard" to "Стандартный вывод", "duplicate" to "Повтор", "searching" to "Идёт поиск",
     "draining" to "Обработка очереди", "finished" to "Завершено", "stopped" to "Остановлено", "failed" to "Сбой поиска")
 
 @Composable
@@ -38,7 +38,7 @@ fun StreamView(job: File, globalFile: File, window: ComposeWindow, fullscreen: B
     var collapsed by remember(job) { mutableStateOf(emptySet<String>()) }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
-    fun eligible(rows: List<Finding>) = rows.filter { (!readyOnly || it.file.isNotBlank()) && (topic == null || it.topic == topic) }
+    fun eligible(rows: List<Finding>) = rows.filter { (!readyOnly || (it.file.isNotBlank() && it.status != "review")) && (topic == null || it.topic == topic) }
     LaunchedEffect(job, readyOnly, topic) {
         while (true) {
             try {
@@ -121,7 +121,7 @@ fun StreamView(job: File, globalFile: File, window: ComposeWindow, fullscreen: B
                                 Text(row.theorem, Modifier.height(40.dp), style = MaterialTheme.typography.body2, maxLines = 2, overflow = TextOverflow.Ellipsis)
                                 Text("Красота GeoGen: ${beautyLabel(row.beauty)}", style = MaterialTheme.typography.caption, maxLines = 1)
                                 Text(labels[row.status] ?: row.status,
-                                    color = if (row.status == "error" || row.status == "timeout") MaterialTheme.colors.error else Color.DarkGray,
+                                    color = if (row.status == "error" || row.status == "timeout" || row.status == "review") MaterialTheme.colors.error else Color.DarkGray,
                                     style = MaterialTheme.typography.caption, maxLines = 1)
                             }
                             Divider()
@@ -132,9 +132,11 @@ fun StreamView(job: File, globalFile: File, window: ComposeWindow, fullscreen: B
         }
         Column(Modifier.weight(1f).fillMaxHeight()) {
             val row = findings.firstOrNull { it.id == selected }
-            if (row != null) Column(Modifier.fillMaxWidth().height(60.dp).background(Color(0xfff2f3f5)).padding(8.dp)) {
+            if (row != null) Column(Modifier.fillMaxWidth().height(100.dp).background(Color(0xfff2f3f5)).padding(8.dp)) {
                 Text(topicLabel(row.topic), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.subtitle2)
                 Text("Красота GeoGen: ${beautyLabel(row.beauty)} · ${labels[row.status] ?: row.status}", style = MaterialTheme.typography.body2)
+                Text(qualityLabel(row.quality), style = MaterialTheme.typography.caption)
+                if (row.detail.isNotBlank()) Text(row.detail, style = MaterialTheme.typography.caption, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 if (row == null) {

@@ -1,0 +1,15 @@
+Constructions:
+Midpoint
+MidpointOfArc
+MidpointOfOppositeArc
+OppositePointOnCircumcircle
+
+Initial configuration:
+Triangle: A, B, C
+D = MidpointOfArc(A, B, C)
+
+Iterations: 2
+MaximalPoints: 4
+MaximalLines: 2
+MaximalCircles: 2
+SymmetryGenerationMode: GenerateBothSymmetricAndAsymmetric

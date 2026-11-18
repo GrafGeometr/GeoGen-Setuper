@@ -2,7 +2,8 @@ import java.util.Locale
 
 data class Finding(
     val id: String, val status: String, val theorem: String, val file: String, val detail: String,
-    val beauty: Double? = null, val topic: String = theorem.substringBefore(':').trim().ifEmpty { "Unknown" }
+    val beauty: Double? = null, val topic: String = theorem.substringBefore(':').trim().ifEmpty { "Unknown" },
+    val quality: String = "unverified", val qualityScore: Double? = null
 )
 
 val topicLabels = linkedMapOf(
@@ -26,7 +27,7 @@ fun parseFinding(line: String): Finding? {
     val score = cols.getOrNull(5)?.toDoubleOrNull()?.takeIf { it.isFinite() }
     val topic = cols.getOrNull(6)?.takeIf { it.isNotBlank() }
         ?: cols[2].substringBefore(':').trim().ifEmpty { "Unknown" }
-    return Finding(cols[0], cols[1], cols[2], cols[3], cols[4], score, topic)
+    return Finding(cols[0], cols[1], cols[2], cols[3], cols[4], score, topic, cols.getOrNull(7) ?: "unverified", cols.getOrNull(8)?.toDoubleOrNull()?.takeIf { it.isFinite() })
 }
 
 // Append newly visible rows; completion timestamps and producer ordering must never
@@ -40,3 +41,10 @@ fun mergeFindingOrder(previous: List<String>, current: List<Finding>): List<Stri
 fun sortByBeauty(rows: List<Finding>): List<String> = rows.sortedWith(
     compareByDescending<Finding> { it.beauty ?: Double.NEGATIVE_INFINITY }.thenBy { it.id }
 ).map { it.id }
+
+fun qualityLabel(value: String) = when(value) {
+    "sampled-valid" -> "Проверено на точных пробах"
+    "review" -> "Нужна проверка условий"
+    "standard" -> "Стандартное доказательство"
+    else -> "Истинность отдельно не проверялась"
+}

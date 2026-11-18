@@ -1,0 +1,91 @@
+{
+  "density": {
+    "finish": {
+      "kind": "finish",
+      "seconds": 600.0154325,
+      "counters": {
+        "Attempts": 45858,
+        "Built": 42806,
+        "Evaluated": 42661,
+        "Invalid": 2507,
+        "Duplicate": 160,
+        "Expanded": 2833,
+        "Retained": 11332,
+        "Emitted": 2110,
+        "Restarts": 33,
+        "Epochs": 1,
+        "ConstructMs": 4137.120100000012,
+        "ContextMs": 26003.18710000006,
+        "FinderMs": 548475.436500004,
+        "MetricMs": 3617.1187999999534,
+        "SamplingMs": 261.48760000000016
+      },
+      "frontier": 9,
+      "visited": 38357,
+      "cpuMs": 587330,
+      "peakWorkingSet": 643510272
+    },
+    "status": {
+      "checkMs": 1500,
+      "searchState": "completed",
+      "standardChecks": true,
+      "qualityChecks": true,
+      "phase": "finished",
+      "counts": {
+        "error": 3,
+        "rejected": 9,
+        "timeout": 2
+      }
+    },
+    "sampledDepth4": {
+      "count": 400,
+      "meanDensity": 2.3434090909090908,
+      "meanNewPointDegree": 1.5875
+    }
+  },
+  "uniform": {
+    "finish": {
+      "kind": "finish",
+      "seconds": 600.0059323,
+      "counters": {
+        "Attempts": 44964,
+        "Built": 41566,
+        "Evaluated": 41438,
+        "Invalid": 2837,
+        "Duplicate": 157,
+        "Expanded": 2777,
+        "Retained": 11108,
+        "Emitted": 4786,
+        "Restarts": 32,
+        "Epochs": 1,
+        "ConstructMs": 4044.0985999999857,
+        "ContextMs": 25431.829100000195,
+        "FinderMs": 527823.9852000049,
+        "MetricMs": 4127.590499999967,
+        "SamplingMs": 260.9580000000001
+      },
+      "frontier": 8,
+      "visited": 36443,
+      "cpuMs": 588410,
+      "peakWorkingSet": 638976000
+    },
+    "status": {
+      "checkMs": 1500,
+      "searchState": "completed",
+      "standardChecks": true,
+      "qualityChecks": true,
+      "phase": "finished",
+      "counts": {
+        "error": 1,
+        "rejected": 6,
+        "review": 1,
+        "timeout": 2
+      }
+    },
+    "sampledDepth4": {
+      "count": 392,
+      "meanDensity": 3.0577458256029684,
+      "meanNewPointDegree": 4.737244897959184
+    }
+  }
+}
