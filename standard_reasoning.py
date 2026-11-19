@@ -366,6 +366,12 @@ class Context:
                 row = {}
                 for line, coefficient in zip(lines, (1,-1,-1,1)):
                     row = add(row,{line:coefficient})
+        elif kind == 'EqualAngles' and len(args) == 4:
+            lines = [self.line_object(arg) for arg in args]
+            if all(lines):
+                row = {}
+                for line, coefficient in zip(lines, (-1,1,1,-1)):
+                    row = add(row, {line: coefficient})
         if row is not None:
             proof = self.system.prove(row, rhs)
             if proof is not None and self.system.verify(row, rhs, proof):
@@ -391,6 +397,19 @@ class Context:
                 factor = self.proportional(u, v)
                 if factor is not None:
                     identity = {'factor': str(factor)}
+            elif kind == 'EqualAngles' and len(args) == 4:
+                pairs=[tuple(x.strip() for x in arg[1:-1].split(',')) if arg.startswith('[') else self.lines.get(arg,()) for arg in args]
+                if all(isinstance(pair,tuple) and len(pair)==2 for pair in pairs):
+                    vectors=[self.vector(*pair) for pair in pairs]
+                    first=self.proportional(vectors[0],vectors[2]);second=self.proportional(vectors[1],vectors[3])
+                    if first and second:
+                        identity={'parallelFactors':[str(first),str(second)]}
+            elif kind in ('LengthRatio2','LengthRatio3') and len(args) == 4:
+                u,v=self.vector(args[0],args[1]),self.vector(args[2],args[3])
+                factor=self.proportional(u,v)
+                target=Q(2 if kind=='LengthRatio2' else 3)
+                if factor is not None and abs(factor) in (target,1/target):
+                    identity={'factor':str(factor)}
             elif kind == 'EqualLineSegments' and len(args) == 4:
                 u, v = self.vector(args[0], args[1]), self.vector(args[2], args[3])
                 if u == v or u == scale(v, -1):
@@ -423,11 +442,15 @@ class Context:
                                         'identity': identity, 'sources': sources}}
         except KeyError:
             pass
-        if (kind=='EqualLineSegments' and len(args)==4) or (kind=='PerpendicularLines' and len(args)==2):
+        if (kind in ('EqualLineSegments','LengthRatio2','LengthRatio3','SquaredLengthRatio2') and len(args)==4) or (kind=='PerpendicularLines' and len(args)==2):
             try:
-                if kind=='EqualLineSegments':
+                if kind in ('EqualLineSegments','LengthRatio2','LengthRatio3','SquaredLengthRatio2'):
                     u,v=self.vector(args[0],args[1]),self.vector(args[2],args[3])
-                    polynomial=add(dot(u,u),dot(v,v),-1)
+                    if not u or not v:raise KeyError('undefined segment')
+                    factor={'EqualLineSegments':1,'LengthRatio2':4,'LengthRatio3':9,'SquaredLengthRatio2':2}[kind]
+                    polynomial=add(dot(u,u),dot(v,v),-factor)
+                    if factor!=1 and self.metric_system.prove(polynomial) is None:
+                        polynomial=add(dot(v,v),dot(u,u),-factor)
                 else:
                     pairs=[tuple(x.strip() for x in a[1:-1].split(',')) if a.startswith('[') else self.lines.get(a,()) for a in args]
                     if not all(isinstance(p,tuple) and len(p)==2 for p in pairs):raise KeyError('unsupported line')

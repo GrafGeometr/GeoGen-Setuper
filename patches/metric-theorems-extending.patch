@@ -1,0 +1,36 @@
+diff --git a/app/Functions.hs b/app/Functions.hs
+--- a/app/Functions.hs
++++ b/app/Functions.hs
+@@ -703,7 +703,11 @@
+ 
+ factCheckers :: Map.Map String ([Shape] -> Bool)
+ factCheckers = Map.fromList
+-    [ ("Incidence", checkIncidence), (
++    [ ("LengthRatio2", mkChecker $ \a b c d -> let x=norm (b-a); y=norm (d-c) in x>0 && y>0 && (x==4*y || y==4*x))
++    , ("LengthRatio3", mkChecker $ \a b c d -> let x=norm (b-a); y=norm (d-c) in x>0 && y>0 && (x==9*y || y==9*x))
++    , ("SquaredLengthRatio2", mkChecker $ \a b c d -> let x=norm (b-a); y=norm (d-c) in x>0 && y>0 && (x==2*y || y==2*x))
++    , ("EqualAngles", mkChecker $ \a b c d -> let z=coef b * coef c * conj (coef a * coef d) in norm z /= 0 && checkReal z)
++    , ("Incidence", checkIncidence), (
+         "CollinearPoints", mkChecker $ \a b c -> checkReal $ (b - a) * conj (c - a)
+     ), (
+         "ConcyclicPoints", mkChecker $ \a b c d -> checkReal $ (a - b) * (d - c) * conj (b - c) * conj (a - d)
+diff --git a/test/Regression.hs b/test/Regression.hs
+--- a/test/Regression.hs
++++ b/test/Regression.hs
+@@ -40,6 +40,16 @@
+                         Command "X" ["A","B","C"] (functions Map.! name)]
+         assert (name ++ " incidental fact is filtered")
+                (not (fixed (check10 commands (Conclusion ["X","l"] checkIncidence))))
++    let fact name shapes = (factCheckers Map.! name) shapes
++    assert "ratio 2 positive" (fact "LengthRatio2" (map PointShape [0,2,3,4]))
++    assert "ratio 2 symmetric" (fact "LengthRatio2" (map PointShape [3,4,0,2]))
++    assert "ratio 2 negative" (not (fact "LengthRatio2" (map PointShape [0,3,4,5])))
++    assert "ratio 3 positive" (fact "LengthRatio3" (map PointShape [0,3,4,5]))
++    assert "square ratio 2" (fact "SquaredLengthRatio2" (map PointShape [0,1 :+ 1,0,1]))
++    assert "ratio rejects zero" (not (fact "LengthRatio2" (map PointShape [0,0,0,0])))
++    let horizontal=line 0 1; diagonal=line 0 (1 :+ 1); reversed=line (3 :+ 3) (2 :+ 2)
++    assert "angles modulo pi" (fact "EqualAngles" (map LineShape [horizontal,diagonal,horizontal,reversed]))
++    assert "angles directed" (not (fact "EqualAngles" (map LineShape [horizontal,diagonal,diagonal,horizontal])))
+     let end = point . fixed . last $ (functions Map.! "BisectorEnd") args
+     assert "BisectorEnd is at the A-angle" (end == (13/2 :+ 0))
+     let l = line 0 2; circle2 = circle 0 2

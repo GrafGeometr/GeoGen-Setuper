@@ -138,6 +138,7 @@ def create(family_file, output, *, budget, search_workers=2, check_workers=2, ch
         atomic_text(output / f'family/story-{i:04}.txt', story.text())
     atomic_text(output / 'family/catalog.json', json.dumps(catalog.data, ensure_ascii=False, indent=2))
     metadata = {'kind': 'campaign', 'version': 1, 'phase': 'created', 'searchState': 'stopped',
+                'extraTheorems': [t for t in os.environ.get('GEOGEN_EXTRA_THEOREMS','').split(',') if t],
                 'createdAt': time.time(), 'budgetSeconds': budget, 'spentSeconds': 0,
                 'searchWorkers': search_workers, 'checkWorkers': check_workers, 'checkMs': check_ms,
                 'sliceSeconds': family.config['search']['sliceSeconds'], 'backendKey': backend_key(catalog),
@@ -225,6 +226,7 @@ def run(output, *, extra_budget=0, search_workers=None, check_workers=None, retr
     catalog = Catalog.read(output / 'family/catalog.json')
     with job_lock(output):
         metadata = json.loads((output / 'run-state.json').read_text())
+        os.environ['GEOGEN_EXTRA_THEOREMS'] = ','.join(metadata.get('extraTheorems', []))
         if metadata.get('kind') != 'campaign' or metadata.get('version') != 1:
             raise ValueError('Неизвестный формат кампании')
         current_catalog = Catalog.read(app.ROOT / 'data/construction-catalog.json')

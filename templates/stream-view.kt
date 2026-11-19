@@ -1,3 +1,6 @@
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -30,7 +33,10 @@ fun StreamView(job: File, globalFile: File, window: ComposeWindow, fullscreen: B
     var counts by remember(job) { mutableStateOf("") }
     var readError by remember(job) { mutableStateOf("") }
     var selected by remember(job) { mutableStateOf<String?>(null) }
-    var readyOnly by remember(job) { mutableStateOf(true) }
+    var section by remember(job) { mutableStateOf("ready") }
+    var sectionMenu by remember(job) { mutableStateOf(false) }
+    var showCondition by remember(job) { mutableStateOf(false) }
+    var conditionText by remember(job) { mutableStateOf("") }
     var topic by remember(job) { mutableStateOf<String?>(null) }
     var topicMenu by remember(job) { mutableStateOf(false) }
     var rowOrder by remember(job) { mutableStateOf(emptyList<String>()) }
@@ -38,8 +44,8 @@ fun StreamView(job: File, globalFile: File, window: ComposeWindow, fullscreen: B
     var collapsed by remember(job) { mutableStateOf(emptySet<String>()) }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
-    fun eligible(rows: List<Finding>) = rows.filter { (!readyOnly || (it.file.isNotBlank() && it.status != "review")) && (topic == null || it.topic == topic) }
-    LaunchedEffect(job, readyOnly, topic) {
+    fun eligible(rows: List<Finding>) = rows.filter { inFindingSection(it, section) && (topic == null || it.topic == topic) }
+    LaunchedEffect(job, section, topic) {
         while (true) {
             try {
                 val snapshot = withContext(Dispatchers.IO) {
@@ -57,7 +63,7 @@ fun StreamView(job: File, globalFile: File, window: ComposeWindow, fullscreen: B
                     (labels[parts[0]] ?: parts[0]) + if (parts.size == 2) ": " + parts[1] else ""
                 }
                 readError = ""
-                if (selected == null) selected = visible.firstOrNull { it.file.isNotBlank() }?.id
+                if (selected == null || visible.none { it.id == selected }) selected = visible.firstOrNull()?.id
             } catch (error: Exception) {
                 readError = "Не удалось прочитать результаты: ${error.message}"
             }
@@ -80,9 +86,17 @@ fun StreamView(job: File, globalFile: File, window: ComposeWindow, fullscreen: B
             Box(Modifier.fillMaxWidth().height(18.dp)) {
                 if (readError.isNotEmpty()) Text(readError, color = MaterialTheme.colors.error, maxLines = 1, style = MaterialTheme.typography.caption)
             }
-            Row(Modifier.height(36.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                Checkbox(readyOnly, { readyOnly = it; rowOrder = emptyList(); selected = null; resetScroll() })
-                Text("Только готовые")
+            Box(Modifier.fillMaxWidth().height(36.dp)) {
+                TextButton({ sectionMenu = true }, Modifier.fillMaxWidth()) {
+                    Text("Раздел: " + findingSections[section], maxLines = 1)
+                }
+                DropdownMenu(sectionMenu, { sectionMenu = false }) {
+                    findingSections.forEach { (value, title) ->
+                        DropdownMenuItem({ section = value; sectionMenu = false; rowOrder = emptyList(); selected = null; resetScroll() }) {
+                            Text(title + " (${findings.count { inFindingSection(it, value) }})")
+                        }
+                    }
+                }
             }
             Box(Modifier.fillMaxWidth().height(36.dp)) {
                 TextButton({ topicMenu = true }, Modifier.fillMaxWidth()) {
@@ -102,7 +116,7 @@ fun StreamView(job: File, globalFile: File, window: ComposeWindow, fullscreen: B
             Text("Новые задачи — в конце темы. Сортировка — по кнопке.", Modifier.height(32.dp), style = MaterialTheme.typography.caption, maxLines = 2)
             LazyColumn(Modifier.weight(1f), state = listState) {
                 if (visible.isEmpty()) item(key = "empty") {
-                    Text(if (readyOnly) "Готовых задач пока нет. Снимите фильтр, чтобы увидеть очередь и ошибки." else "Ожидаем находки GeoGen…", Modifier.padding(8.dp))
+                    Text("В этом разделе находок пока нет. Выберите другой раздел или дождитесь результатов.", Modifier.padding(8.dp))
                 }
                 topicOrder.forEach { kind ->
                     val group = ordered.filter { it.topic == kind }
@@ -132,6 +146,20 @@ fun StreamView(job: File, globalFile: File, window: ComposeWindow, fullscreen: B
         }
         Column(Modifier.weight(1f).fillMaxHeight()) {
             val row = findings.firstOrNull { it.id == selected }
+            LaunchedEffect(job, row?.id, row?.conditionFile, row?.status) {
+                conditionText = ""
+                val current = row
+                if (current != null) conditionText = try {
+                    withContext(Dispatchers.IO) { loadFindingCondition(job, current) }
+                } catch (error: Exception) {
+                    if (error is kotlinx.coroutines.CancellationException) throw error
+                    "Не удалось прочитать условие: ${error.message}"
+                }
+            }
+            if (row != null) Row(Modifier.fillMaxWidth().height(36.dp)) {
+                TextButton({ showCondition = true }) { Text("Условие") }
+                if (row.file.isNotBlank()) TextButton({ showCondition = false }) { Text("Чертёж") }
+            }
             if (row != null) Column(Modifier.fillMaxWidth().height(100.dp).background(Color(0xfff2f3f5)).padding(8.dp)) {
                 Text(topicLabel(row.topic), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.subtitle2)
                 Text("Красота GeoGen: ${beautyLabel(row.beauty)} · ${labels[row.status] ?: row.status}", style = MaterialTheme.typography.body2)
@@ -141,11 +169,14 @@ fun StreamView(job: File, globalFile: File, window: ComposeWindow, fullscreen: B
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 if (row == null) {
                     Text("Выберите задачу слева. Новые результаты появятся автоматически.", Modifier.padding(24.dp))
-                } else if (row.file.isBlank()) {
-                    Column(Modifier.padding(24.dp)) {
-                        Text(row.theorem, style = MaterialTheme.typography.h6)
-                        Text(labels[row.status] ?: row.status)
-                        if (row.detail.isNotEmpty()) Text(row.detail)
+                } else if (row.file.isBlank() || showCondition) {
+                    SelectionContainer {
+                        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp)) {
+                            Text(labels[row.status] ?: row.status, style = MaterialTheme.typography.subtitle1)
+                            if (row.detail.isNotEmpty()) Text(row.detail, color = MaterialTheme.colors.error)
+                            Spacer(Modifier.height(16.dp))
+                            Text(conditionText.ifEmpty { "Загрузка условия…" }, style = MaterialTheme.typography.body1)
+                        }
                     }
                 } else {
                     val geoDir = File(job, "geo").canonicalFile

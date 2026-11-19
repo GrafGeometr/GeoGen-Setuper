@@ -63,6 +63,16 @@ def check_construction_coverage(work: Path):
     return {'required': sorted(required), 'extending': sorted(extending), 'converter': sorted(converter)}
 
 
+def check_metric_theorem_coverage(work: Path):
+    required={'LengthRatio2','LengthRatio3','SquaredLengthRatio2','EqualAngles'}
+    haskell=(work/'GeometryExtending/app/Functions.hs').read_text().partition('factCheckers = Map.fromList')[2]
+    converter=(work/'Geometry/GeoGenIntegration/src/nativeMain/kotlin/Main.kt').read_text().partition('fun GeoGenContext.parseGeoGenGoal')[2]
+    for label,text in [('Extending',haskell),('Geometry',converter)]:
+        missing=required-set(re.findall(r'"(\w+)"\s*(?=,|->)',text))
+        if missing:raise BuildError('Нет поддержки новых теорем в '+label+': '+', '.join(sorted(missing)))
+    return sorted(required)
+
+
 def enrich_catalog(path: Path, work: Path):
     """Compute end-to-end layout support from the actual packaged backend registries."""
     catalog = json.loads(path.read_text())
@@ -308,7 +318,11 @@ class Builder:
         self.apply_source_patch(self.work / 'GeoGen', HERE / 'patches/native-theorem-search.patch')
         self.apply_source_patch(self.work / 'GeoGen', HERE / 'patches/soft-theorem-search.patch')
         self.apply_source_patch(self.work / 'GeoGen', HERE / 'patches/rank-interval-search.patch')
+        self.apply_source_patch(self.work / 'GeoGen', HERE / 'patches/metric-theorems-geogen.patch')
+        self.apply_source_patch(self.work / 'GeometryExtending', HERE / 'patches/metric-theorems-extending.patch')
+        self.apply_source_patch(self.work / 'Geometry', HERE / 'patches/metric-theorems-geometry.patch')
         coverage = check_construction_coverage(self.work)
+        check_metric_theorem_coverage(self.work)
         if self.stage.exists():
             shutil.rmtree(self.stage)
         self.stage.mkdir()
@@ -422,6 +436,10 @@ class Builder:
         write(self.stage/'data/experimental-relations.json',json.dumps({'version':1,'sha256':hashlib.sha256(generator_dll.read_bytes()).hexdigest()}))
         problem_dll=self.stage/'lib/geogen/GeoGen.ProblemGenerator.dll'
         write(self.stage/'data/native-theorem-search.json',json.dumps({'version':1,'features':['original-soft-search-v1','exact-rank-interval-v1'],'sha256':hashlib.sha256(problem_dll.read_bytes()).hexdigest()}))
+        metric_files=['lib/geogen/'+name+'.dll' for name in ('GeoGen.Core','GeoGen.TheoremFinder','GeoGen.Constructor','GeoGen.TheoremSorter','GeoGen.TheoremProver')]
+        metric_files += ['lib/extending/GeometryExtending']
+        metric_files += [str(p.relative_to(self.stage)) for p in (self.stage/'lib/converter').glob('*.jar')]
+        write(self.stage/'data/metric-theorems.json',json.dumps({'version':1,'sha256':{p:hashlib.sha256((self.stage/p).read_bytes()).hexdigest() for p in metric_files}}))
         shutil.copytree(HERE / 'examples/search', self.stage / 'examples/search')
         shutil.copytree(HERE / 'examples/families', self.stage / 'examples/families')
         write(self.stage / 'geometry-suite', '#!/bin/sh\nset -eu\nsuite_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)\nexec python3 "$suite_dir/runtime.py" "$@"\n', True)
@@ -430,7 +448,8 @@ class Builder:
             'platform': platform.platform(), 'sources': self.manifest,
             'dotnet_sdk': DOTNET_VERSION, 'ghc': GHC_VERSION,
             'gradle': GRADLE_VERSION, 'jdk': '17',
-            'patches': ['Exact local rank intervals over all valid sibling constructions',
+            'patches': ['Indexed fixed length ratios and directed angle equalities with downstream validation',
+                        'Exact local rank intervals over all valid sibling constructions',
                         'Original DFS and early symmetry pruning with optional theorem-count ranges',
                         'Native C# search scored after construction and incremental theorem finding',
                         'Atomic theorem stream, structured Extending checks, live Geometry results',
@@ -457,6 +476,10 @@ class Builder:
         shutil.copy2(HERE / 'SOFT_SEARCH_REPORT.md', self.stage / 'SOFT_SEARCH_REPORT.md')
         shutil.copy2(HERE / 'RANK_SEARCH.md', self.stage / 'RANK_SEARCH.md')
         shutil.copy2(HERE / 'RANK_SEARCH_REPORT.md', self.stage / 'RANK_SEARCH_REPORT.md')
+        shutil.copy2(HERE / 'RESULT_BROWSER.md', self.stage / 'RESULT_BROWSER.md')
+        shutil.copy2(HERE / 'THEOREM_EXPANSION.md', self.stage / 'THEOREM_EXPANSION.md')
+        shutil.copy2(HERE / 'METRIC_THEOREMS.md', self.stage / 'METRIC_THEOREMS.md')
+        shutil.copy2(HERE / 'METRIC_THEOREMS_REPORT.md', self.stage / 'METRIC_THEOREMS_REPORT.md')
         # A broken build must never replace the last working installation.
         self.run([sys.executable, self.stage / 'runtime.py', 'smoke', '--output', self.work / ('smoke-' + uuid.uuid4().hex[:8])], name='smoke')
         dest = self.args.output.resolve()

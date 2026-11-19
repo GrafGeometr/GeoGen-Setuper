@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -74,11 +75,35 @@ def check(directory: Path, *, timeout=300):
     return report
 
 
+def require_metric_bundle():
+    marker = ROOT / 'data/metric-theorems.json'
+    if not marker.is_file():
+        raise ValueError('Этот комплект не поддерживает дополнительные теоремы; выполните build и запустите новый комплект')
+    for relative, expected in json.loads(marker.read_text())['sha256'].items():
+        path = ROOT / relative
+        if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != expected:
+            raise ValueError('Несовместимые компоненты дополнительных теорем: ' + relative)
+
+
 def job_settings(job: Path):
     settings = json.loads((ROOT / 'data/default-settings.json').read_text(encoding='utf-8-sig'))
+    extra = os.environ.get('GEOGEN_EXTRA_THEOREMS', '').split(',')
+    if extra != ['']:
+        require_metric_bundle()
+        allowed={'LengthRatio2','LengthRatio3','SquaredLengthRatio2','EqualAngles'}
+        if not set(extra)<=allowed: raise ValueError('Unsupported extra theorem type')
+        settings['TheoremFindingSettings']['SoughtTheoremTypes'] += [t for t in extra if t not in settings['TheoremFindingSettings']['SoughtTheoremTypes']]
     settings['Serilog']['WriteTo'] = [{'Name': 'Console'}]
     settings['ProblemGeneratorInputProviderSettings']['InputFolderPath'] = str(job / 'inputs')
     settings['InferenceRuleProviderSettings']['RuleFolderPath'] = str(ROOT / 'data/inference-rules')
+    if extra != ['']:
+        rules = job / 'metric-inference-rules'
+        shutil.copytree(ROOT / 'data/inference-rules', rules)
+        for source in rules.rglob('*.metric'):
+            conclusion=re.search(r'=>\s*(\w+):',source.read_text())
+            if conclusion and conclusion.group(1) in extra:
+                source.with_suffix('.txt').write_bytes(source.read_bytes())
+        settings['InferenceRuleProviderSettings']['RuleFolderPath'] = str(rules)
     settings['ObjectIntroductionRuleProviderSettings']['FilePath'] = str(ROOT / 'data/object-rules/object_introduction_rules.txt')
     runner = settings['ProblemGenerationRunnerSettings']
     for name in runner:
@@ -310,6 +335,7 @@ def main():
     run.add_argument('--check-ms', type=int, default=1000, help='Лимит одной проверки Extending, мс')
     run.add_argument('--view', action='store_true', help='Сразу открыть список поступающих результатов')
     run.add_argument('--software', action='store_true')
+    run.add_argument('--extra-theorems', nargs='+', choices=['LengthRatio2','LengthRatio3','SquaredLengthRatio2','EqualAngles'], help='Дополнительные типы утверждений; ядро C#')
     run.add_argument('--timeout', type=int, default=3600, help='Лимит поиска GeoGen в секундах; после него полученная очередь сохраняется и обрабатывается')
     discover = commands.add_parser('discover', help='Исследовать пользовательское семейство сюжетов')
     discover.add_argument('family', type=Path)
@@ -320,6 +346,7 @@ def main():
     discover.add_argument('--check-ms', type=int, default=1000)
     discover.add_argument('--view', action='store_true')
     discover.add_argument('--software', action='store_true')
+    discover.add_argument('--extra-theorems', nargs='+', choices=['LengthRatio2','LengthRatio3','SquaredLengthRatio2','EqualAngles'])
     commands.add_parser('catalog', help='Показать каталог построений и поддержку исходных конфигураций')
     calibration=commands.add_parser('calibrate-search',help='Контрольная статистика исходного GeoGen по сюжетам, seeds и первым построениям')
     calibration.add_argument('inputs',type=Path,nargs='+')
@@ -411,6 +438,7 @@ def main():
                                   proposed=sum(s['proposed'] for s in trace['trace']),
                                   drawn=sum(s['drawn'] for s in trace['trace']),scope=trace['scope']),ensure_ascii=False))
     elif args.command == 'discover':
+        if args.extra_theorems: os.environ['GEOGEN_EXTRA_THEOREMS']=','.join(args.extra_theorems)
         from discovery import create, seconds
         if args.software:
             os.environ['SKIKO_RENDER_API'] = 'SOFTWARE'
@@ -421,6 +449,7 @@ def main():
     elif args.command == 'catalog':
         print((ROOT / 'data/construction-catalog.json').read_text())
     elif args.command == 'run':
+        if args.extra_theorems: os.environ['GEOGEN_EXTRA_THEOREMS']=','.join(args.extra_theorems)
         if args.search_config:
             if args.experimental_relations:parser.error('--search-config нельзя сочетать с --experimental-relations')
             if not args.search_config.is_file():parser.error('Нет файла --search-config')

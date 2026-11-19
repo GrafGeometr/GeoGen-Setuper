@@ -1,0 +1,123 @@
+[
+  {
+    "event": "_story_000000000001",
+    "run": "metric-euler-run",
+    "goal": "LengthRatio2: D, E, D, F",
+    "truth": {
+      "status": "sampled-valid",
+      "samples": 8,
+      "invalidSamples": 0,
+      "seed": 1729
+    }
+  },
+  {
+    "event": "_story_000000000002",
+    "run": "metric-euler-run",
+    "goal": "LengthRatio3: D, E, E, F",
+    "truth": {
+      "status": "sampled-valid",
+      "samples": 8,
+      "invalidSamples": 0,
+      "seed": 1729
+    }
+  },
+  {
+    "event": "_story_000000000002",
+    "run": "metric-right-run",
+    "goal": "SquaredLengthRatio2: A, B, A, E",
+    "truth": {
+      "status": "sampled-valid",
+      "samples": 8,
+      "invalidSamples": 0,
+      "seed": 1729
+    }
+  },
+  {
+    "event": "_story_000000000003",
+    "run": "metric-right-run",
+    "goal": "SquaredLengthRatio2: A, B, B, E",
+    "truth": {
+      "status": "sampled-valid",
+      "samples": 8,
+      "invalidSamples": 0,
+      "seed": 1729
+    }
+  },
+  {
+    "event": "_story_000000000004",
+    "run": "metric-right-run",
+    "goal": "SquaredLengthRatio2: A, C, D, E",
+    "truth": {
+      "status": "sampled-valid",
+      "samples": 8,
+      "invalidSamples": 0,
+      "seed": 1729
+    }
+  },
+  {
+    "event": "_story_000000000005",
+    "run": "metric-right-run",
+    "goal": "SquaredLengthRatio2: A, E, B, D",
+    "truth": {
+      "status": "sampled-valid",
+      "samples": 8,
+      "invalidSamples": 0,
+      "seed": 1729
+    }
+  },
+  {
+    "event": "_story_000000000006",
+    "run": "metric-right-run",
+    "goal": "SquaredLengthRatio2: A, E, C, D",
+    "truth": {
+      "status": "sampled-valid",
+      "samples": 8,
+      "invalidSamples": 0,
+      "seed": 1729
+    }
+  },
+  {
+    "event": "_story_000000000007",
+    "run": "metric-right-run",
+    "goal": "SquaredLengthRatio2: B, E, C, D",
+    "truth": {
+      "status": "sampled-valid",
+      "samples": 8,
+      "invalidSamples": 0,
+      "seed": 1729
+    }
+  },
+  {
+    "event": "_story_000000000008",
+    "run": "metric-right-run",
+    "goal": "SquaredLengthRatio2: B, D, C, E",
+    "truth": {
+      "status": "sampled-valid",
+      "samples": 8,
+      "invalidSamples": 0,
+      "seed": 1729
+    }
+  },
+  {
+    "event": "_story_000000000010",
+    "run": "metric-right-run",
+    "goal": "SquaredLengthRatio2: A, D, A, E",
+    "truth": {
+      "status": "sampled-valid",
+      "samples": 8,
+      "invalidSamples": 0,
+      "seed": 1729
+    }
+  },
+  {
+    "event": "_story_000000000011",
+    "run": "metric-right-run",
+    "goal": "SquaredLengthRatio2: A, D, D, E",
+    "truth": {
+      "status": "sampled-valid",
+      "samples": 8,
+      "invalidSamples": 0,
+      "seed": 1729
+    }
+  }
+]

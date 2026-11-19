@@ -1,0 +1,130 @@
+[
+  {
+    "fixture": "ratio2",
+    "goal": "LengthRatio2: A, B, A, D",
+    "truth": {
+      "status": "sampled-valid",
+      "samples": 8,
+      "invalidSamples": 0,
+      "seed": 1729
+    },
+    "converted": true
+  },
+  {
+    "fixture": "ratio2-false",
+    "goal": "LengthRatio3: A, B, A, D",
+    "truth": {
+      "status": "counterexample",
+      "samples": 0,
+      "sampleSeed": 1729,
+      "acute": true,
+      "initialPoints": [
+        {
+          "name": "A",
+          "x": "-15",
+          "y": "-43"
+        },
+        {
+          "name": "B",
+          "x": "-25",
+          "y": "-8"
+        },
+        {
+          "name": "C",
+          "x": "49",
+          "y": "-17"
+        }
+      ]
+    },
+    "converted": true
+  },
+  {
+    "fixture": "ratio3",
+    "goal": "LengthRatio3: A, D, E, D",
+    "truth": {
+      "status": "sampled-valid",
+      "samples": 8,
+      "invalidSamples": 0,
+      "seed": 1729
+    },
+    "converted": true
+  },
+  {
+    "fixture": "square2-false",
+    "goal": "SquaredLengthRatio2: A, B, A, E",
+    "truth": {
+      "status": "counterexample",
+      "samples": 0,
+      "sampleSeed": 1729,
+      "acute": false,
+      "initialPoints": [
+        {
+          "name": "A",
+          "x": "0",
+          "y": "0"
+        },
+        {
+          "name": "B",
+          "x": "0",
+          "y": "50"
+        },
+        {
+          "name": "C",
+          "x": "95",
+          "y": "0"
+        }
+      ]
+    },
+    "converted": true
+  },
+  {
+    "fixture": "square2",
+    "goal": "SquaredLengthRatio2: A, D, A, E",
+    "truth": {
+      "status": "sampled-valid",
+      "samples": 8,
+      "invalidSamples": 0,
+      "seed": 1729
+    },
+    "converted": true
+  },
+  {
+    "fixture": "angle",
+    "goal": "EqualAngles: [A, B], [B, C], [A, D], [D, E]",
+    "truth": {
+      "status": "sampled-valid",
+      "samples": 8,
+      "invalidSamples": 0,
+      "seed": 1729
+    },
+    "converted": true
+  },
+  {
+    "fixture": "angle-false",
+    "goal": "EqualAngles: [A, B], [B, C], [D, E], [A, D]",
+    "truth": {
+      "status": "counterexample",
+      "samples": 0,
+      "sampleSeed": 1729,
+      "acute": true,
+      "initialPoints": [
+        {
+          "name": "A",
+          "x": "-15",
+          "y": "-43"
+        },
+        {
+          "name": "B",
+          "x": "-25",
+          "y": "-8"
+        },
+        {
+          "name": "C",
+          "x": "49",
+          "y": "-17"
+        }
+      ]
+    },
+    "converted": true
+  }
+]

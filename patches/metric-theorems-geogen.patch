@@ -1,0 +1,656 @@
+diff --git a/Source/Launchers/GeoGen.DrawingLauncher/Data/language.mp b/Source/Launchers/GeoGen.DrawingLauncher/Data/language.mp
+--- a/Source/Launchers/GeoGen.DrawingLauncher/Data/language.mp
++++ b/Source/Launchers/GeoGen.DrawingLauncher/Data/language.mp
+@@ -172,4 +172,16 @@
+ 
+ def Incidence_Text(expr P,k) =
+ 	"Show that $" & P & "$ lies on $" & k & "$. "
+-enddef;
+\ No newline at end of file
++enddef;
++def LengthRatio2_Text(expr k,l) =
++    "Show that one of the lengths $" & k & ",$ $" & l & "$ is twice the other. "
++enddef;
++def LengthRatio3_Text(expr k,l) =
++    "Show that one of the lengths $" & k & ",$ $" & l & "$ is three times the other. "
++enddef;
++def SquaredLengthRatio2_Text(expr k,l) =
++    "Show that one of the squared lengths $" & k & ",$ $" & l & "$ is twice the other. "
++enddef;
++def EqualAngles_Text(expr a,b,c,d) =
++    "Show that the directed angles $(" & a & "," & b & ")$ and $(" & c & "," & d & ")$ are equal modulo $180^\circ$. "
++enddef;
+diff --git a/Source/Launchers/GeoGen.DrawingLauncher/MetapostDrawer/MetapostDrawer.cs b/Source/Launchers/GeoGen.DrawingLauncher/MetapostDrawer/MetapostDrawer.cs
+--- a/Source/Launchers/GeoGen.DrawingLauncher/MetapostDrawer/MetapostDrawer.cs
++++ b/Source/Launchers/GeoGen.DrawingLauncher/MetapostDrawer/MetapostDrawer.cs
+@@ -579,6 +579,14 @@
+                 }
+ 
+                 // With line segments
++                case TheoremType.EqualAngles:
++                    foreach(var angle in theorem.InvolvedObjects.Cast<AngleTheoremObject>()){
++                        DrawTheoremLine(angle.First,false);DrawTheoremLine(angle.Second,false);
++                    }
++                    break;
++                case TheoremType.LengthRatio2:
++                case TheoremType.LengthRatio3:
++                case TheoremType.SquaredLengthRatio2:
+                 case TheoremType.EqualLineSegments:
+                 {
+                     // Take the line segments
+@@ -708,6 +716,9 @@
+                 case TheoremType.PerpendicularLines:
+                 case TheoremType.TangentCircles:
+                 case TheoremType.EqualLineSegments:
++                case TheoremType.LengthRatio2:
++                case TheoremType.LengthRatio3:
++                case TheoremType.SquaredLengthRatio2:
+ 
+                     // Simply convert individual objects 
+                     theoremObjectString = theorem.InvolvedObjects.Select(theoremObject => $"\"{ConvertTheoremObject(theoremObject)}\"")
+@@ -716,6 +727,11 @@
+                         // Join
+                         .ToJoinedString();
+ 
++                    break;
++
++                case TheoremType.EqualAngles:
++                    theoremObjectString=theorem.InvolvedObjects.Cast<AngleTheoremObject>()
++                        .SelectMany(a=>new[]{a.First,a.Second}).Select(a=>$"\"{ConvertTheoremObject(a)}\"").ToJoinedString();
+                     break;
+ 
+                 // Here we want the line to be first
+diff --git a/Source/Library/GeoGen.Constructor/TheoremVerifier/GeometricTheoremVerifier.cs b/Source/Library/GeoGen.Constructor/TheoremVerifier/GeometricTheoremVerifier.cs
+--- a/Source/Library/GeoGen.Constructor/TheoremVerifier/GeometricTheoremVerifier.cs
++++ b/Source/Library/GeoGen.Constructor/TheoremVerifier/GeometricTheoremVerifier.cs
+@@ -87,6 +87,7 @@
+ 
+                     // If we have a line segment, then its inner objects are points
+                     LineSegmentTheoremObject lineSegment => lineSegment.PointSet,
++                    AngleTheoremObject angle => new TheoremObject[] { angle.First, angle.Second },
+ 
+                     // Unhandled cases
+                     _ => throw new ConstructorException($"Unhandled type of {nameof(TheoremObject)}: {theoremObject.GetType()}")
+@@ -324,6 +325,20 @@
+                 }
+ 
+                 // We should have two line segments 
++                case EqualAngles:
++                {
++                    var angles=theorem.InvolvedObjects.Cast<AngleTheoremObject>().ToArray();
++                    return MetricRelations.Angles((Line)analyticObjectProvider(angles[0].First),(Line)analyticObjectProvider(angles[0].Second),
++                        (Line)analyticObjectProvider(angles[1].First),(Line)analyticObjectProvider(angles[1].Second));
++                }
++                case LengthRatio2:
++                case LengthRatio3:
++                case SquaredLengthRatio2:
++                {
++                    var s=theorem.InvolvedObjects.Cast<LineSegmentTheoremObject>().ToArray();
++                    return MetricRelations.Ratio(MetricRelations.SquaredDistance((Point)analyticObjectProvider(s[0].Point1),(Point)analyticObjectProvider(s[0].Point2)),
++                        MetricRelations.SquaredDistance((Point)analyticObjectProvider(s[1].Point1),(Point)analyticObjectProvider(s[1].Point2)),MetricRelations.Factor(theorem.Type));
++                }
+                 case EqualLineSegments:
+                 {
+                     // Get the segments by taking the theorem objects
+diff --git a/Source/Library/GeoGen.Constructor/TheoremVerifier/MetricRelations.cs b/Source/Library/GeoGen.Constructor/TheoremVerifier/MetricRelations.cs
+new file mode 100644
+--- /dev/null
++++ b/Source/Library/GeoGen.Constructor/TheoremVerifier/MetricRelations.cs
+@@ -0,0 +1,24 @@
++using GeoGen.AnalyticGeometry;
++using GeoGen.Core;
++namespace GeoGen.Constructor;
++public static class MetricRelations
++{
++    public const double Tolerance=1e-8;
++    public static double Factor(TheoremType type)=>type switch {
++        TheoremType.LengthRatio2=>4, TheoremType.LengthRatio3=>9, TheoremType.SquaredLengthRatio2=>2,
++        _=>throw new ArgumentException("Not a fixed ratio") };
++    public static double SquaredDistance(Point a,Point b)=> (a.X-b.X)*(a.X-b.X)+(a.Y-b.Y)*(a.Y-b.Y);
++    public static bool Ratio(double a,double b,double factor)=>a>0 && b>0 && double.IsFinite(a+b) &&
++        Math.Abs(Math.Max(a,b)-factor*Math.Min(a,b))<=Tolerance*Math.Max(a,b);
++    public static (double x,double y) DirectionAngle(Line a,Line b)
++    {
++        var dot=a.A*b.A+a.B*b.B;var cross=a.A*b.B-a.B*b.A;
++        var norm=dot*dot+cross*cross;
++        return norm>0 ? ((dot*dot-cross*cross)/norm,2*dot*cross/norm) : (double.NaN,double.NaN);
++    }
++    public static bool Angles(Line a,Line b,Line c,Line d)
++    {
++        var u=DirectionAngle(a,b);var v=DirectionAngle(c,d);
++        return double.IsFinite(u.x+u.y+v.x+v.y) && Math.Abs(u.x-v.x)<=Tolerance && Math.Abs(u.y-v.y)<=Tolerance;
++    }
++}
+diff --git a/Source/Library/GeoGen.Core/Parsing/Parser.cs b/Source/Library/GeoGen.Core/Parsing/Parser.cs
+--- a/Source/Library/GeoGen.Core/Parsing/Parser.cs
++++ b/Source/Library/GeoGen.Core/Parsing/Parser.cs
+@@ -289,7 +289,8 @@
+                         // Points (EqualLineSegments are flattened)
+                         TheoremType.CollinearPoints => typeof(PointTheoremObject),
+                         TheoremType.ConcyclicPoints => typeof(PointTheoremObject),
+-                        TheoremType.EqualLineSegments => typeof(PointTheoremObject),
++                        TheoremType.EqualLineSegments or TheoremType.LengthRatio2 or TheoremType.LengthRatio3 or TheoremType.SquaredLengthRatio2 => typeof(PointTheoremObject),
++                        TheoremType.EqualAngles => typeof(LineTheoremObject),
+ 
+                         // Lines
+                         TheoremType.ConcurrentLines => typeof(LineTheoremObject),
+diff --git a/Source/Library/GeoGen.Core/Theorems/AngleTheoremObject.cs b/Source/Library/GeoGen.Core/Theorems/AngleTheoremObject.cs
+new file mode 100644
+--- /dev/null
++++ b/Source/Library/GeoGen.Core/Theorems/AngleTheoremObject.cs
+@@ -0,0 +1,23 @@
++namespace GeoGen.Core;
++
++/// <summary>A directed angle between two unoriented lines, modulo pi. Line order matters.</summary>
++public sealed class AngleTheoremObject : TheoremObject
++{
++    public LineTheoremObject First { get; }
++    public LineTheoremObject Second { get; }
++    public AngleTheoremObject(LineTheoremObject first, LineTheoremObject second)
++    {
++        First=first ?? throw new ArgumentNullException(nameof(first));
++        Second=second ?? throw new ArgumentNullException(nameof(second));
++        if(first.Equals(second))throw new ArgumentException("Angle requires distinct lines");
++    }
++    public override IEnumerable<ConfigurationObject> GetInnerConfigurationObjects()
++        => First.GetInnerConfigurationObjects().Concat(Second.GetInnerConfigurationObjects()).Distinct();
++    public override AngleTheoremObject Remap(IReadOnlyDictionary<ConfigurationObject,ConfigurationObject> mapping,bool flattenObjectsFromPoints=false)
++    {
++        var a=First.Remap(mapping,flattenObjectsFromPoints);var b=Second.Remap(mapping,flattenObjectsFromPoints);
++        return a==null || b==null || a.Equals(b) ? null : new AngleTheoremObject(a,b);
++    }
++    public override bool Equals(object obj)=>obj is AngleTheoremObject a && First.Equals(a.First) && Second.Equals(a.Second);
++    public override int GetHashCode()=>HashCode.Combine(First,Second);
++}
+diff --git a/Source/Library/GeoGen.Core/Theorems/Theorem.cs b/Source/Library/GeoGen.Core/Theorems/Theorem.cs
+--- a/Source/Library/GeoGen.Core/Theorems/Theorem.cs
++++ b/Source/Library/GeoGen.Core/Theorems/Theorem.cs
+@@ -218,7 +218,12 @@
+                 Incidence => flattenedObjects,
+ 
+                 // Here the first two points make one line segment and the next one the other one// Case with line segments
+-                EqualLineSegments => new TheoremObject[]
++                EqualAngles => new TheoremObject[]
++                {
++                    new AngleTheoremObject((LineTheoremObject)flattenedObjects[0], (LineTheoremObject)flattenedObjects[1]),
++                    new AngleTheoremObject((LineTheoremObject)flattenedObjects[2], (LineTheoremObject)flattenedObjects[3])
++                },
++                EqualLineSegments or LengthRatio2 or LengthRatio3 or SquaredLengthRatio2 => new TheoremObject[]
+                 {
+                     new LineSegmentTheoremObject((PointTheoremObject)flattenedObjects[0], (PointTheoremObject)flattenedObjects[1]),
+                     new LineSegmentTheoremObject((PointTheoremObject)flattenedObjects[2], (PointTheoremObject)flattenedObjects[3])
+@@ -237,7 +242,25 @@
+         #region HashCode and Equals
+ 
+         /// <inheritdoc/>
+-        public override int GetHashCode() => (Type, InvolvedObjects).GetHashCode();
++        private Dictionary<LineTheoremObject,int> _angleEquation;
++        private Dictionary<LineTheoremObject,int> AngleEquation()
++        {
++            if(_angleEquation!=null)return _angleEquation;
++            var row=new Dictionary<LineTheoremObject,int>();
++            var a=(AngleTheoremObject)InvolvedObjectsList[0];var b=(AngleTheoremObject)InvolvedObjectsList[1];
++            foreach(var (line,coefficient) in new[]{(a.First,-1),(a.Second,1),(b.First,1),(b.Second,-1)})
++                row[line]=row.GetValueOrDefault(line)+coefficient;
++            foreach(var line in row.Where(p=>p.Value==0).Select(p=>p.Key).ToArray())row.Remove(line);
++            return _angleEquation=row;
++        }
++        private int AngleHash(bool reverse)=>AngleEquation().Aggregate(0,(n,p)=>n^HashCode.Combine(p.Key,reverse ? -p.Value : p.Value));
++        private bool AnglesEqual(Theorem other)
++        {
++            var a=AngleEquation();var b=other.AngleEquation();
++            return a.Count==b.Count && (a.All(p=>b.GetValueOrDefault(p.Key)==p.Value)||a.All(p=>b.GetValueOrDefault(p.Key)==-p.Value));
++        }
++        public override int GetHashCode() => Type == EqualAngles
++            ? HashCode.Combine(Type,Math.Min(AngleHash(false),AngleHash(true))) : (Type,InvolvedObjects).GetHashCode();
+ 
+         /// <inheritdoc/>
+         public override bool Equals(object otherObject)
+@@ -250,7 +273,7 @@
+                 // And their types matches
+                 && Type.Equals(theorem.Type)
+                 // And their involved objects matches
+-                && InvolvedObjects.Equals(theorem.InvolvedObjects);
++                && (InvolvedObjects.Equals(theorem.InvolvedObjects) || (Type == EqualAngles && AnglesEqual(theorem)));
+ 
+         #endregion
+ 
+diff --git a/Source/Library/GeoGen.Core/Theorems/TheoremType.cs b/Source/Library/GeoGen.Core/Theorems/TheoremType.cs
+--- a/Source/Library/GeoGen.Core/Theorems/TheoremType.cs
++++ b/Source/Library/GeoGen.Core/Theorems/TheoremType.cs
+@@ -53,6 +53,10 @@
+         /// <summary>
+         /// A point lies on a line or circle.
+         /// </summary>
+-        Incidence
++        Incidence,
++        LengthRatio2,
++        LengthRatio3,
++        SquaredLengthRatio2,
++        EqualAngles
+     }
+ }
+\ No newline at end of file
+diff --git a/Source/Library/GeoGen.Core/Theorems/TheoremTypeExtensions.cs b/Source/Library/GeoGen.Core/Theorems/TheoremTypeExtensions.cs
+--- a/Source/Library/GeoGen.Core/Theorems/TheoremTypeExtensions.cs
++++ b/Source/Library/GeoGen.Core/Theorems/TheoremTypeExtensions.cs
+@@ -24,7 +24,7 @@
+             ConcurrentLines => 3,
+ 
+             // 2 line segments are equal
+-            EqualLineSegments => 2,
++            EqualLineSegments or LengthRatio2 or LengthRatio3 or SquaredLengthRatio2 or EqualAngles => 2,
+ 
+             // 2 objects are equal
+             EqualObjects => 2,
+diff --git a/Source/Library/GeoGen.Core/Utilities/OutputFormatter.cs b/Source/Library/GeoGen.Core/Utilities/OutputFormatter.cs
+--- a/Source/Library/GeoGen.Core/Utilities/OutputFormatter.cs
++++ b/Source/Library/GeoGen.Core/Utilities/OutputFormatter.cs
+@@ -250,6 +250,9 @@
+                     }
+ 
+                 // For a line segment
++                case AngleTheoremObject angle:
++                    return $"{FormatTheoremObject(angle.First)}, {FormatTheoremObject(angle.Second)}";
++
+                 case LineSegmentTheoremObject lineSegment:
+ 
+                     // We convert individual objects
+diff --git a/Source/Library/GeoGen.TheoremFinder/Finders/IndexedMetricTheoremFinders.cs b/Source/Library/GeoGen.TheoremFinder/Finders/IndexedMetricTheoremFinders.cs
+new file mode 100644
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremFinder/Finders/IndexedMetricTheoremFinders.cs
+@@ -0,0 +1,111 @@
++using GeoGen.AnalyticGeometry;
++using GeoGen.Constructor;
++using GeoGen.Core;
++
++namespace GeoGen.TheoremFinder;
++
++public abstract class FixedLengthRatioTheoremFinder : TheoremFinderBase
++{
++    private sealed record Segment(PointObject A,PointObject B,double[] Values,bool New);
++    public override bool ValidateOldTheorem(ContextualPicture picture,Theorem theorem)=>true;
++    public override IEnumerable<Theorem> FindAllTheorems(ContextualPicture picture)=>Find(picture,false).Distinct();
++    public override IEnumerable<Theorem> FindNewTheorems(ContextualPicture picture)=>Find(picture,true).Distinct();
++    private IEnumerable<Theorem> Find(ContextualPicture context,bool incremental)
++    {
++        var points=context.AllPoints.ToArray();var pictures=context.Pictures.ToArray();var added=context.NewPoints.ToHashSet();
++        var index=new Dictionary<long,List<Segment>>();var factor=MetricRelations.Factor(Type);
++        const double cell=1e-7;
++        for(var i=0;i<points.Length;i++)for(var j=0;j<i;j++)
++        {
++            var values=new double[pictures.Length];
++            for(var p=0;p<pictures.Length;p++)values[p]=MetricRelations.SquaredDistance(
++                (Point)context.GetAnalyticObject(points[i],pictures[p]),(Point)context.GetAnalyticObject(points[j],pictures[p]));
++            if(values.Any(v=>v<=0 || !double.IsFinite(v)))continue;
++            var row=new Segment(points[i],points[j],values,added.Contains(points[i])||added.Contains(points[j]));
++            // Relative scale is indexed logarithmically; adjacent cells prevent boundary losses.
++            foreach(var target in new[]{values[0]*factor,values[0]/factor})
++            {
++                if(target<=0 || !double.IsFinite(target))continue;
++                var key=(long)Math.Floor(Math.Log(target)/cell);
++                for(var delta=-1;delta<=1;delta++)if(index.TryGetValue(key+delta,out var bucket))foreach(var old in bucket)
++                {
++                    if(incremental && !row.New && !old.New)continue;
++                    if(!Enumerable.Range(0,values.Length).All(p=>MetricRelations.Ratio(values[p],old.Values[p],factor)))continue;
++                    yield return new Theorem(Type,new TheoremObject[]{
++                        new LineSegmentTheoremObject(row.A.ConfigurationObject,row.B.ConfigurationObject),
++                        new LineSegmentTheoremObject(old.A.ConfigurationObject,old.B.ConfigurationObject)});
++                }
++            }
++            var own=(long)Math.Floor(Math.Log(values[0])/cell);
++            if(!index.TryGetValue(own,out var list))index[own]=list=new();list.Add(row);
++        }
++    }
++}
++public sealed class LengthRatio2TheoremFinder : FixedLengthRatioTheoremFinder { }
++public sealed class LengthRatio3TheoremFinder : FixedLengthRatioTheoremFinder { }
++public sealed class SquaredLengthRatio2TheoremFinder : FixedLengthRatioTheoremFinder { }
++
++public sealed class EqualAnglesTheoremFinder : TheoremFinderBase
++{
++    private sealed record Entry(LineObject First,LineObject Second,(double x,double y)[] Values,bool New);
++    public override bool ValidateOldTheorem(ContextualPicture picture,Theorem theorem)=>true;
++    public override IEnumerable<Theorem> FindAllTheorems(ContextualPicture picture)=>Find(picture,false).Distinct();
++    public override IEnumerable<Theorem> FindNewTheorems(ContextualPicture picture)=>Find(picture,true).Distinct();
++    private static LineTheoremObject Definition(LineObject line)
++    {
++        if(line.ConfigurationObject!=null)return new LineTheoremObject(line.ConfigurationObject);
++        var points=line.Points.Take(2).Select(p=>p.ConfigurationObject).ToArray();
++        return new LineTheoremObject(points[0],points[1]);
++    }
++    private IEnumerable<Theorem> Find(ContextualPicture context,bool incremental)
++    {
++        var lines=context.AllLines.ToArray();var pictures=context.Pictures.ToArray();var added=context.NewLines.ToHashSet();
++        var index=new Dictionary<long,List<Entry>>();const double cell=1e-7;
++        var analytic=lines.ToDictionary(line=>line,line=>pictures.Select(p=>(Line)context.GetAnalyticObject(line,p)).ToArray());
++        var definitions=lines.ToDictionary(line=>line,Definition);
++        var intersections=new Dictionary<(LineObject,LineObject),ConfigurationObject>();
++        ConfigurationObject Common(LineObject a,LineObject b)
++        {
++            if(intersections.TryGetValue((a,b),out var cached))return cached;
++            var first=definitions[a];var second=definitions[b];
++            var point=first.DefinedByPoints && second.DefinedByPoints ? first.Points.FirstOrDefault(second.Points.Contains) : null;
++            intersections[(a,b)]=point;intersections[(b,a)]=point;return point;
++        }
++        bool Elementary(Entry row,Entry old)
++        {
++            // Transport between already parallel directions adds no relation beyond ParallelLines.
++            if(Enumerable.Range(0,pictures.Length).All(p=>analytic[row.First][p].IsParallelTo(analytic[old.First][p]) &&
++                analytic[row.Second][p].IsParallelTo(analytic[old.Second][p])))return true;
++            // Only literal endpoints of the fixed statement count here. Using newly discovered
++            // incidences would make old theorem retention depend on later construction steps.
++            if(new[]{row.First,row.Second,old.First,old.Second}.Distinct().Count()!=4)return false;
++            // Four named cross-intersections turn this equation into ConcyclicPoints.
++            var vertices=new[]{Common(row.First,row.Second),Common(row.First,old.First),
++                Common(old.Second,row.Second),Common(old.Second,old.First)};
++            return vertices.All(p=>p!=null) && vertices.Distinct().Count()==4;
++        }
++        for(var i=0;i<lines.Length;i++)for(var j=0;j<i;j++)
++        {
++            var first=lines[j];var second=lines[i];var values=new (double x,double y)[pictures.Length];
++            for(var p=0;p<pictures.Length;p++)values[p]=MetricRelations.DirectionAngle(
++                analytic[first][p],analytic[second][p]);
++            // Parallel/perpendicular angles already have dedicated theorem types.
++            if(values.Any(v=>!double.IsFinite(v.x+v.y)) || Math.Abs(values[0].y)<MetricRelations.Tolerance)continue;
++            // Reverse both lines for a canonical acute orientation on the reference picture.
++            if(values[0].y<0){(first,second)=(second,first);for(var p=0;p<values.Length;p++)values[p].y=-values[p].y;}
++            var row=new Entry(first,second,values,added.Contains(first)||added.Contains(second));
++            var key=(long)Math.Floor(Math.Atan2(values[0].y,values[0].x)/cell);
++            for(var delta=-1;delta<=1;delta++)if(index.TryGetValue(key+delta,out var bucket))foreach(var old in bucket)
++            {
++                if(incremental && !row.New && !old.New)continue;
++                if(!Enumerable.Range(0,values.Length).All(p=>Math.Abs(values[p].x-old.Values[p].x)<=MetricRelations.Tolerance &&
++                    Math.Abs(values[p].y-old.Values[p].y)<=MetricRelations.Tolerance))continue;
++                if(Elementary(row,old))continue;
++                yield return new Theorem(Type,new TheoremObject[]{
++                    new AngleTheoremObject(definitions[first],definitions[second]),
++                    new AngleTheoremObject(definitions[old.First],definitions[old.Second])});
++            }
++            if(!index.TryGetValue(key,out var list))index[key]=list=new();list.Add(row);
++        }
++    }
++}
+diff --git a/Source/Library/GeoGen.TheoremFinder/TheoremFinder.cs b/Source/Library/GeoGen.TheoremFinder/TheoremFinder.cs
+--- a/Source/Library/GeoGen.TheoremFinder/TheoremFinder.cs
++++ b/Source/Library/GeoGen.TheoremFinder/TheoremFinder.cs
+@@ -108,6 +108,7 @@
+                 // If we have a point or line segment (internally consisting of points...)
+                 case PointTheoremObject _:
+                 case LineSegmentTheoremObject _:
++                case AngleTheoremObject _:
+ 
+                     // Then there is no way to find a new definition of the object,
+                     // i.e. we return the 'no change of definition' option
+diff --git a/Source/Library/GeoGen.TheoremProver/InferenceRules/Applier/InferenceRuleApplier.cs b/Source/Library/GeoGen.TheoremProver/InferenceRules/Applier/InferenceRuleApplier.cs
+--- a/Source/Library/GeoGen.TheoremProver/InferenceRules/Applier/InferenceRuleApplier.cs
++++ b/Source/Library/GeoGen.TheoremProver/InferenceRules/Applier/InferenceRuleApplier.cs
+@@ -1,4 +1,4 @@
+-﻿using GeoGen.Core;
++﻿﻿using GeoGen.Core;
+ using GeoGen.Utilities;
+ using static GeoGen.Core.PredefinedConstructionType;
+ 
+@@ -529,6 +529,12 @@
+                             .Select(mapping => mapping.WithMappedPair(mappedPair));
+ 
+                 // If we have a line segment
++                case AngleTheoremObject templateAngle:
++                    var realAngle=(AngleTheoremObject)realObject;
++                    return Map(currentMapping,(templateAngle.First,realAngle.First),allowExplicitToImplicitObjectMapping,normalizationFunction,equalObjectFunction)
++                        .SelectMany(mapping=>Map(mapping,(templateAngle.Second,realAngle.Second),allowExplicitToImplicitObjectMapping,normalizationFunction,equalObjectFunction))
++                        .Select(mapping=>mapping.WithMappedPair(mappedPair));
++
+                 case LineSegmentTheoremObject templateSegment:
+ 
+                     // Cast the other object ((that we already know has the same type)
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/MetricRelations/centroid_ratio.metric b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/MetricRelations/centroid_ratio.metric
+new file mode 100644
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/MetricRelations/centroid_ratio.metric
+@@ -0,0 +1,12 @@
++Objects:
++
++ G = Centroid(A, B, C)
++ M = Midpoint(B, C)
++
++Theorems:
++
++
++
++Implications:
++
++ () => LengthRatio3: A, M, G, M
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/MetricRelations/cyclic_angles.metric b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/MetricRelations/cyclic_angles.metric
+new file mode 100644
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/MetricRelations/cyclic_angles.metric
+@@ -0,0 +1,11 @@
++Objects:
++
++
++
++Theorems:
++
++ t1 = ConcyclicPoints: A, B, C, D
++
++Implications:
++
++ (t1) => EqualAngles: [A, B], [A, C], [D, B], [D, C]
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/MetricRelations/midpoint_ratio.metric b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/MetricRelations/midpoint_ratio.metric
+new file mode 100644
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/MetricRelations/midpoint_ratio.metric
+@@ -0,0 +1,11 @@
++Objects:
++
++ M = Midpoint(A, B)
++
++Theorems:
++
++
++
++Implications:
++
++ () => LengthRatio2: A, B, A, M
+diff --git a/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/MetricRelations/right_isosceles_ratio.metric b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/MetricRelations/right_isosceles_ratio.metric
+new file mode 100644
+--- /dev/null
++++ b/Source/Library/GeoGen.TheoremProver.InferenceRuleProvider/Rules/MetricRelations/right_isosceles_ratio.metric
+@@ -0,0 +1,12 @@
++Objects:
++
++
++
++Theorems:
++
++ t1 = PerpendicularLines: [A, B], [A, C]
++ t2 = EqualLineSegments: A, B, A, C
++
++Implications:
++
++ (t1, t2) => SquaredLengthRatio2: B, C, A, B
+diff --git a/Source/Library/GeoGen.TheoremSorter/AnalyticTheorem.cs b/Source/Library/GeoGen.TheoremSorter/AnalyticTheorem.cs
+--- a/Source/Library/GeoGen.TheoremSorter/AnalyticTheorem.cs
++++ b/Source/Library/GeoGen.TheoremSorter/AnalyticTheorem.cs
+@@ -1,4 +1,5 @@
+ ﻿using GeoGen.Constructor;
++using GeoGen.AnalyticGeometry;
+ using GeoGen.Core;
+ using GeoGen.Utilities;
+ 
+@@ -11,6 +12,22 @@
+     /// </summary>
+     internal class AnalyticTheorem
+     {
++        private sealed class AngleContent
++        {
++            private readonly Dictionary<Line,int> _row=new();
++            public AngleContent(IEnumerable<(Line,Line)> pairs)
++            {
++                var a=pairs.ToArray();
++                foreach(var (line,coefficient) in new[]{(a[0].Item1,-1),(a[0].Item2,1),(a[1].Item1,1),(a[1].Item2,-1)})
++                    _row[line]=_row.GetValueOrDefault(line)+coefficient;
++                foreach(var line in _row.Where(p=>p.Value==0).Select(p=>p.Key).ToArray())_row.Remove(line);
++            }
++            public override int GetHashCode()=>Math.Min(_row.Aggregate(0,(n,p)=>n^HashCode.Combine(p.Key,p.Value)),
++                _row.Aggregate(0,(n,p)=>n^HashCode.Combine(p.Key,-p.Value)));
++            public override bool Equals(object obj)=>obj is AngleContent other && _row.Count==other._row.Count &&
++                (_row.All(p=>other._row.GetValueOrDefault(p.Key)==p.Value)||_row.All(p=>other._row.GetValueOrDefault(p.Key)==-p.Value));
++        }
++
+         #region Private fields
+ 
+         /// <summary>
+@@ -59,7 +76,9 @@
+                                     .ToReadOnlyHashSet(),
+ 
+                 // In this case we have two line segment objects
+-                TheoremType.EqualLineSegments =>
++                TheoremType.EqualAngles => new AngleContent(theorem.InvolvedObjects.Cast<AngleTheoremObject>()
++                    .Select(a=>((Line)picture.Construct(a.First),(Line)picture.Construct(a.Second)))),
++                TheoremType.EqualLineSegments or TheoremType.LengthRatio2 or TheoremType.LengthRatio3 or TheoremType.SquaredLengthRatio2 =>
+                             // Take the inner objects
+                             theorem.InvolvedObjects
+                                     // We know they are line segments
+diff --git a/Source/Tests/UnitTests/GeoGen.ConfigurationGenerator.Tests/MetricRelationsTest.cs b/Source/Tests/UnitTests/GeoGen.ConfigurationGenerator.Tests/MetricRelationsTest.cs
+new file mode 100644
+--- /dev/null
++++ b/Source/Tests/UnitTests/GeoGen.ConfigurationGenerator.Tests/MetricRelationsTest.cs
+@@ -0,0 +1,121 @@
++using GeoGen.Core;
++using GeoGen.Constructor;
++using GeoGen.TheoremFinder;
++using GeoGen.AnalyticGeometry;
++using NUnit.Framework;
++using Ninject;
++using System.Diagnostics;
++using static GeoGen.Core.PredefinedConstructions;
++namespace GeoGen.ConfigurationGenerator.Tests;
++[TestFixture]
++public class MetricRelationsTest
++{
++    [TestCase(TheoremType.LengthRatio2,4)] [TestCase(TheoremType.LengthRatio3,9)] [TestCase(TheoremType.SquaredLengthRatio2,2)]
++    public void Fixed_ratios_are_symmetric_nonzero_and_scale_invariant(TheoremType type,double factor)
++    {
++        Assert.That(MetricRelations.Factor(type),Is.EqualTo(factor));
++        foreach(var scale in new[]{1e-12,1.0,1e12}){
++            Assert.That(MetricRelations.Ratio(factor*scale,scale,factor),Is.True);
++            Assert.That(MetricRelations.Ratio(scale,factor*scale,factor),Is.True);
++            Assert.That(MetricRelations.Ratio((factor+.1)*scale,scale,factor),Is.False);
++        }
++        Assert.That(MetricRelations.Ratio(0,0,factor),Is.False);
++    }
++    [Test]
++    public void Angles_are_directed_modulo_pi_not_unsigned()
++    {
++        var horizontal=new Line(new Point(0,0),new Point(1,0));
++        var diagonal=new Line(new Point(0,0),new Point(1,1));
++        var reverse=new Line(new Point(3,3),new Point(2,2));
++        Assert.That(MetricRelations.Angles(horizontal,diagonal,horizontal,reverse),Is.True);
++        Assert.That(MetricRelations.Angles(horizontal,diagonal,diagonal,horizontal),Is.False);
++    }
++    [Test]
++    public void Angle_equations_canonicalize_regrouping_and_global_reversal()
++    {
++        var lines=Enumerable.Range(0,4).Select(_=>new LineTheoremObject(new LooseConfigurationObject(ConfigurationObjectType.Line))).ToArray();
++        Theorem Make(int a,int b,int c,int d)=>Theorem.DeriveFromFlattenedObjects(TheoremType.EqualAngles,new TheoremObject[]{lines[a],lines[b],lines[c],lines[d]});
++        var original=Make(0,1,2,3);
++        foreach(var other in new[]{Make(0,2,1,3),Make(1,0,3,2),Make(2,3,0,1)}){
++            Assert.That(other,Is.EqualTo(original));Assert.That(other.GetHashCode(),Is.EqualTo(original.GetHashCode()));
++        }
++        Assert.That(Make(1,0,2,3),Is.Not.EqualTo(original));
++    }
++    private static Configuration Configuration(int points)
++    {
++        var a=new LooseConfigurationObject(ConfigurationObjectType.Point);var b=new LooseConfigurationObject(ConfigurationObjectType.Point);var c=new LooseConfigurationObject(ConfigurationObjectType.Point);
++        var holder=new LooseObjectHolder(new[]{a,b,c},LooseObjectLayout.Triangle);
++        var m=new ConstructedConfigurationObject(Midpoint,b,c);
++        var defs=new List<ConstructedConfigurationObject>{m,
++            new(ComposedConstructions.Centroid,a,b,c),new(Midpoint,a,b),new(Midpoint,a,c),
++            new(ComposedConstructions.Incenter,a,b,c),new(ComposedConstructions.Circumcenter,a,b,c),new(ComposedConstructions.Orthocenter,a,b,c)};
++        return new Configuration(holder,defs.Take(points-3).ToArray());
++    }
++    [Test]
++    public void Indexed_finders_find_real_facts_and_incremental_length_facts()
++    {
++        var (_,constructor,_,kernel)=SoftSearchTest.Services();using(kernel){
++            var configuration=Configuration(8);
++            var (pictures,data)=constructor.ConstructWithUniformLayout(configuration,3);
++            var context=new ContextualPicture(pictures);
++            foreach(ITypedTheoremFinder finder in new ITypedTheoremFinder[]{new LengthRatio2TheoremFinder(),new LengthRatio3TheoremFinder(),new EqualAnglesTheoremFinder()}){
++                var facts=finder.FindAllTheorems(context).ToArray();Assert.That(facts,Is.Not.Empty,finder.Type.ToString());
++                var formatter=new OutputFormatter(configuration.AllObjects);
++                foreach(var fact in facts){
++                    Assert.That(kernel.Get<IGeometricTheoremVerifier>().IsTrueInAllPictures(pictures,fact),Is.True);
++                    var text=formatter.FormatTheorem(fact);
++                    var names=configuration.AllObjects.ToDictionary(o=>formatter.GetObjectName(o),o=>o);
++                    Assert.That(Parser.ParseTheorem(text,names,false),Is.EqualTo(fact),text);
++                }
++            }
++        }
++    }
++    [Test]
++    public void Incremental_results_equal_a_full_rescan()
++    {
++        var (_,constructor,_,kernel)=SoftSearchTest.Services();using(kernel){
++            var full=Configuration(8);var old=new Configuration(full.LooseObjectsHolder,full.ConstructedObjects.Take(full.ConstructedObjects.Count-1).ToArray());
++            var (oldPictures,_)=constructor.ConstructWithUniformLayout(old,3);var oldContext=new ContextualPicture(oldPictures);
++            var (newPictures,_data)=constructor.ConstructByCloning(oldPictures,full);var context=oldContext.ConstructByCloning(newPictures);
++            foreach(ITypedTheoremFinder finder in new ITypedTheoremFinder[]{new LengthRatio2TheoremFinder(),new LengthRatio3TheoremFinder(),new SquaredLengthRatio2TheoremFinder(),new EqualAnglesTheoremFinder()}){
++                var expected=finder.FindAllTheorems(context).ToHashSet();var actual=finder.FindAllTheorems(oldContext).Concat(finder.FindNewTheorems(context)).ToHashSet();
++                Assert.That(actual.SetEquals(expected),Is.True,finder.Type.ToString());
++            }
++        }
++    }
++    [Test]
++    public void Squared_ratio_finder_detects_a_right_angle_bisector_configuration()
++    {
++        var (_,_,_,kernel)=SoftSearchTest.Services();using(kernel){
++            var a=new LooseConfigurationObject(ConfigurationObjectType.Point);var b=new LooseConfigurationObject(ConfigurationObjectType.Point);var c=new LooseConfigurationObject(ConfigurationObjectType.Point);
++            var d=new ConstructedConfigurationObject(ComposedConstructions.MidpointOfArc,a,b,c);
++            var e=new ConstructedConfigurationObject(ComposedConstructions.PerpendicularProjectionOnLineFromPoints,d,a,b);
++            var config=new Configuration(new LooseObjectHolder(new[]{a,b,c},LooseObjectLayout.RightTriangle),new[]{d,e});
++            var (pictures,data)=kernel.Get<IGeometryConstructor>().ConstructWithUniformLayout(config,3);
++            Assert.That(data.InconstructibleObject,Is.Null);
++            var facts=new SquaredLengthRatio2TheoremFinder().FindAllTheorems(new ContextualPicture(pictures)).ToArray();
++            Assert.That(facts,Is.Not.Empty);
++            foreach(var fact in facts)Assert.That(kernel.Get<IGeometricTheoremVerifier>().IsTrueInAllPictures(pictures,fact),Is.True);
++        }
++    }
++    [Test]
++    public void Record_finder_costs_on_six_eight_and_ten_point_configurations()
++    {
++        var (_,constructor,_,kernel)=SoftSearchTest.Services();using(kernel){
++            foreach(var n in new[]{6,8,10}){
++                var config=Configuration(n);var parent=new Configuration(config.LooseObjectsHolder,config.ConstructedObjects.Take(config.ConstructedObjects.Count-1).ToArray());
++                var (parentPictures,data)=constructor.ConstructWithUniformLayout(parent,3);var oldContext=new ContextualPicture(parentPictures);
++                var (pictures,childData)=constructor.ConstructByCloning(parentPictures,config);var context=oldContext.ConstructByCloning(pictures);
++                foreach(ITypedTheoremFinder finder in new ITypedTheoremFinder[]{new LengthRatio2TheoremFinder(),new LengthRatio3TheoremFinder(),new SquaredLengthRatio2TheoremFinder(),new EqualAnglesTheoremFinder(),new TangentCirclesTheoremFinder(new TangentCirclesTheoremFinderSettings(true))}){
++                    foreach(var mode in new[]{"all","new"}){
++                        IEnumerable<Theorem> Find()=>mode=="all" ? finder.FindAllTheorems(context) : finder.FindNewTheorems(context);
++                        var count=Find().Count();var samples=new List<double>();
++                        for(var repeat=0;repeat<7;repeat++){var clock=Stopwatch.StartNew();Assert.That(Find().Count(),Is.EqualTo(count));clock.Stop();samples.Add(clock.Elapsed.TotalMilliseconds);}
++                        samples.Sort();
++                        TestContext.Progress.WriteLine($"METRIC_BENCH n={n} mode={mode} type={finder.Type} count={count} medianMs={samples[3]:F3} minMs={samples[0]:F3} maxMs={samples[6]:F3}");
++                    }
++                }
++            }
++        }
++    }
++}
+diff --git a/Source/Tests/UnitTests/GeoGen.TheoremProver.Tests/TrivialTheoremProducerTest.cs b/Source/Tests/UnitTests/GeoGen.TheoremProver.Tests/TrivialTheoremProducerTest.cs
+--- a/Source/Tests/UnitTests/GeoGen.TheoremProver.Tests/TrivialTheoremProducerTest.cs
++++ b/Source/Tests/UnitTests/GeoGen.TheoremProver.Tests/TrivialTheoremProducerTest.cs
+@@ -62,7 +62,9 @@
+             var M = new ConstructedConfigurationObject(MidpointOfOppositeArc, A, B, C);
+ 
+             // Find the trivial theorems
+-            Producer.InferTrivialTheoremsFromObject(M)
++            var inferred = Producer.InferTrivialTheoremsFromObject(M).ToArray();
++            inferred.Any(theorem => theorem.Type == EqualAngles).Should().BeTrue("arc midpoint has defining angle identities");
++            inferred.Where(theorem => theorem.Type != EqualAngles)
+                 // There should be these theorems
+                 .OrderlessEquals(new[]
+                 {

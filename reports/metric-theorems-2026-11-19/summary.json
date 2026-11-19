@@ -1,0 +1,334 @@
+{
+  "csharpTests": 298,
+  "pythonTests": 100,
+  "patches": 19,
+  "cleanBuild": true,
+  "haskellRegression": true,
+  "geometryCompiled": true,
+  "metaPostProjectCompiled": true,
+  "metaPostRendered": false,
+  "guiInteractiveTested": false,
+  "convertedFixtureDiagramsChecked": 7,
+  "nativeDiagnosticDiagramsChecked": 13,
+  "newNativeRatioFactsValidated": 11,
+  "campaignSelectionRestored": true,
+  "matchingCsharpSourceFiles": 368,
+  "integration": {
+    "ready": 43,
+    "rejected": 93,
+    "timeout": 10
+  },
+  "integrationSeconds": 120,
+  "finderTrace": {
+    "kind": "finish",
+    "seconds": 120.0022362,
+    "counters": {
+      "Candidates": 33161,
+      "OutsideReferenceStratum": 0,
+      "SymmetryPrunedBeforeDrawing": 32646,
+      "DrawingAttempts": 515,
+      "InvalidDrawings": 106,
+      "FinderCalls": 409,
+      "FinderMs": 3148.366299999998,
+      "MetricsEvaluated": 0,
+      "MetricsMs": 0,
+      "Checkpoints": 0,
+      "IncompleteSymmetryPreserved": 0,
+      "OutsideTargets": 0,
+      "RejectedByBias": 0,
+      "Outputs": 400,
+      "RankPools": 0,
+      "RankCompletedPools": 0,
+      "RankCandidates": 0,
+      "RankSymmetryPruned": 0,
+      "RankDrawingAttempts": 0,
+      "RankInvalidDrawings": 0,
+      "RankFinderCalls": 0,
+      "RankMetricsEvaluated": 0,
+      "RankSelected": 0,
+      "RankBelowMinimumNewTheorems": 0,
+      "RankingMs": 0
+    },
+    "originalGenerator": true,
+    "cpuMs": 114760,
+    "peakWorkingSet": 128397312
+  },
+  "types": {
+    "EqualAngles": 125,
+    "TangentCircles": 7,
+    "ConcurrentLines": 12,
+    "PerpendicularLines": 2
+  },
+  "benchmarks": [
+    {
+      "n": "6",
+      "mode": "all",
+      "type": "LengthRatio2",
+      "count": "7",
+      "medianMs": "0.091",
+      "minMs": "0.067",
+      "maxMs": "0.235"
+    },
+    {
+      "n": "6",
+      "mode": "new",
+      "type": "LengthRatio2",
+      "count": "4",
+      "medianMs": "0.062",
+      "minMs": "0.041",
+      "maxMs": "0.073"
+    },
+    {
+      "n": "6",
+      "mode": "all",
+      "type": "LengthRatio3",
+      "count": "2",
+      "medianMs": "0.050",
+      "minMs": "0.029",
+      "maxMs": "0.080"
+    },
+    {
+      "n": "6",
+      "mode": "new",
+      "type": "LengthRatio3",
+      "count": "1",
+      "medianMs": "0.036",
+      "minMs": "0.025",
+      "maxMs": "0.042"
+    },
+    {
+      "n": "6",
+      "mode": "all",
+      "type": "SquaredLengthRatio2",
+      "count": "0",
+      "medianMs": "0.031",
+      "minMs": "0.011",
+      "maxMs": "0.042"
+    },
+    {
+      "n": "6",
+      "mode": "new",
+      "type": "SquaredLengthRatio2",
+      "count": "0",
+      "medianMs": "0.034",
+      "minMs": "0.031",
+      "maxMs": "0.047"
+    },
+    {
+      "n": "6",
+      "mode": "all",
+      "type": "EqualAngles",
+      "count": "0",
+      "medianMs": "0.066",
+      "minMs": "0.063",
+      "maxMs": "0.070"
+    },
+    {
+      "n": "6",
+      "mode": "new",
+      "type": "EqualAngles",
+      "count": "0",
+      "medianMs": "0.067",
+      "minMs": "0.063",
+      "maxMs": "0.081"
+    },
+    {
+      "n": "6",
+      "mode": "all",
+      "type": "TangentCircles",
+      "count": "0",
+      "medianMs": "0.480",
+      "minMs": "0.430",
+      "maxMs": "0.919"
+    },
+    {
+      "n": "6",
+      "mode": "new",
+      "type": "TangentCircles",
+      "count": "0",
+      "medianMs": "0.233",
+      "minMs": "0.208",
+      "maxMs": "0.362"
+    },
+    {
+      "n": "8",
+      "mode": "all",
+      "type": "LengthRatio2",
+      "count": "12",
+      "medianMs": "0.046",
+      "minMs": "0.045",
+      "maxMs": "0.066"
+    },
+    {
+      "n": "8",
+      "mode": "new",
+      "type": "LengthRatio2",
+      "count": "0",
+      "medianMs": "0.020",
+      "minMs": "0.018",
+      "maxMs": "0.021"
+    },
+    {
+      "n": "8",
+      "mode": "all",
+      "type": "LengthRatio3",
+      "count": "3",
+      "medianMs": "0.029",
+      "minMs": "0.027",
+      "maxMs": "0.032"
+    },
+    {
+      "n": "8",
+      "mode": "new",
+      "type": "LengthRatio3",
+      "count": "0",
+      "medianMs": "0.019",
+      "minMs": "0.018",
+      "maxMs": "0.019"
+    },
+    {
+      "n": "8",
+      "mode": "all",
+      "type": "SquaredLengthRatio2",
+      "count": "0",
+      "medianMs": "0.019",
+      "minMs": "0.018",
+      "maxMs": "0.020"
+    },
+    {
+      "n": "8",
+      "mode": "new",
+      "type": "SquaredLengthRatio2",
+      "count": "0",
+      "medianMs": "0.018",
+      "minMs": "0.018",
+      "maxMs": "0.019"
+    },
+    {
+      "n": "8",
+      "mode": "all",
+      "type": "EqualAngles",
+      "count": "12",
+      "medianMs": "0.203",
+      "minMs": "0.192",
+      "maxMs": "0.298"
+    },
+    {
+      "n": "8",
+      "mode": "new",
+      "type": "EqualAngles",
+      "count": "12",
+      "medianMs": "0.197",
+      "minMs": "0.165",
+      "maxMs": "0.421"
+    },
+    {
+      "n": "8",
+      "mode": "all",
+      "type": "TangentCircles",
+      "count": "0",
+      "medianMs": "2.520",
+      "minMs": "2.362",
+      "maxMs": "25.095"
+    },
+    {
+      "n": "8",
+      "mode": "new",
+      "type": "TangentCircles",
+      "count": "0",
+      "medianMs": "0.956",
+      "minMs": "0.796",
+      "maxMs": "9.505"
+    },
+    {
+      "n": "10",
+      "mode": "all",
+      "type": "LengthRatio2",
+      "count": "16",
+      "medianMs": "0.080",
+      "minMs": "0.071",
+      "maxMs": "0.099"
+    },
+    {
+      "n": "10",
+      "mode": "new",
+      "type": "LengthRatio2",
+      "count": "4",
+      "medianMs": "0.043",
+      "minMs": "0.043",
+      "maxMs": "0.044"
+    },
+    {
+      "n": "10",
+      "mode": "all",
+      "type": "LengthRatio3",
+      "count": "4",
+      "medianMs": "0.043",
+      "minMs": "0.041",
+      "maxMs": "0.045"
+    },
+    {
+      "n": "10",
+      "mode": "new",
+      "type": "LengthRatio3",
+      "count": "1",
+      "medianMs": "0.034",
+      "minMs": "0.034",
+      "maxMs": "0.070"
+    },
+    {
+      "n": "10",
+      "mode": "all",
+      "type": "SquaredLengthRatio2",
+      "count": "0",
+      "medianMs": "0.030",
+      "minMs": "0.029",
+      "maxMs": "0.031"
+    },
+    {
+      "n": "10",
+      "mode": "new",
+      "type": "SquaredLengthRatio2",
+      "count": "0",
+      "medianMs": "0.030",
+      "minMs": "0.029",
+      "maxMs": "0.030"
+    },
+    {
+      "n": "10",
+      "mode": "all",
+      "type": "EqualAngles",
+      "count": "246",
+      "medianMs": "3.772",
+      "minMs": "3.624",
+      "maxMs": "42.742"
+    },
+    {
+      "n": "10",
+      "mode": "new",
+      "type": "EqualAngles",
+      "count": "150",
+      "medianMs": "2.229",
+      "minMs": "2.189",
+      "maxMs": "2.719"
+    },
+    {
+      "n": "10",
+      "mode": "all",
+      "type": "TangentCircles",
+      "count": "0",
+      "medianMs": "15.693",
+      "minMs": "12.216",
+      "maxMs": "69.176"
+    },
+    {
+      "n": "10",
+      "mode": "new",
+      "type": "TangentCircles",
+      "count": "0",
+      "medianMs": "3.674",
+      "minMs": "3.105",
+      "maxMs": "7.389"
+    }
+  ]
+}

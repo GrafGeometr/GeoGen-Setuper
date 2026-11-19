@@ -58,6 +58,9 @@ class Queue:
         self.db.execute('CREATE INDEX IF NOT EXISTS task_fingerprint ON tasks(fingerprint)')
         self.db.execute('CREATE TABLE IF NOT EXISTS quality_reports (id TEXT PRIMARY KEY, report TEXT NOT NULL, score REAL NOT NULL, verdict TEXT NOT NULL)')
         self.db.commit()
+        self.conditions = self.job / 'conditions'
+        self.conditions.mkdir(exist_ok=True)
+        self.saved_conditions = {p.name for p in self.conditions.glob('*.txt')}
         self.seen = {row['id'] for row in self.db.execute('SELECT id FROM tasks')}
 
     def ingest(self):
@@ -125,8 +128,13 @@ class Queue:
                 score = ''
             topic = str(event.get('theorem', '')).partition(':')[0].strip() or 'Unknown'
             fields = (row['id'], row['state'], event.get('theorem', ''), row['geo'], row['message'], score, topic)
-            if metadata.get('qualityChecks'):
-                fields += quality.get(row['id'], ('unverified',''))
+            fields += quality.get(row['id'], ('unverified',''))
+            condition_name = hashlib.sha256(row['id'].encode('utf-8')).hexdigest() + '.txt'
+            if condition_name not in self.saved_conditions:
+                atomic_text(self.conditions / condition_name,
+                            event.get('configuration', '').rstrip() + '\n\nДоказать:\n' + event.get('theorem', '') + '\n')
+                self.saved_conditions.add(condition_name)
+            fields += ('conditions/' + condition_name,)
             lines.append('\t'.join(safe_text(x) for x in fields))
         atomic_text(self.job / 'results.tsv', '\n'.join(lines) + ('\n' if lines else ''))
         display_phase = metadata['phase']

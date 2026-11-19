@@ -1,0 +1,19 @@
+diff --git a/GeoGenIntegration/src/nativeMain/kotlin/Main.kt b/GeoGenIntegration/src/nativeMain/kotlin/Main.kt
+--- a/GeoGenIntegration/src/nativeMain/kotlin/Main.kt
++++ b/GeoGenIntegration/src/nativeMain/kotlin/Main.kt
+@@ -282,6 +282,15 @@
+             check(args.size == 3) { "Expected 3 lines" }
+             "[red] intersect(${args[0]}, ${args[1]})"
+         }
++        "LengthRatio2", "LengthRatio3", "SquaredLengthRatio2" -> {
++            check(args.size == 4) { "Expected 4 points" }
++            "[red] segment(${args[0]}, ${args[1]})\n[red] segment(${args[2]}, ${args[3]})"
++        }
++        "EqualAngles" -> {
++            check(args.size == 4) { "Expected four lines" }
++            // Parsing the four line arguments already draws them in red.
++            ""
++        }
+         "EqualLineSegments" -> {
+             check(args.size == 4) { "Expected 4 points" }
+             """

@@ -1,0 +1,13 @@
+Constructions:
+Orthocenter
+
+Initial configuration:
+Triangle: A, B, C
+D = Centroid(A, B, C)
+E = Circumcenter(A, B, C)
+
+Iterations: 1
+MaximalPoints: 1
+MaximalLines: 0
+MaximalCircles: 0
+SymmetryGenerationMode: GenerateOnlyFullySymmetric

@@ -64,7 +64,7 @@ class QualityTests(unittest.TestCase):
    q.ingest()
    q.finish('item',dict(state='ready',geo='x.geo',quality=dict(qualityScore=70,verdict='sampled-valid')),False)
    q.export(dict(phase='finished',qualityChecks=True))
-   self.assertEqual(len((self.root/'results.tsv').read_text().strip().split('\t')),9)
+   self.assertEqual(len((self.root/'results.tsv').read_text().strip().split('\t')),10)
    q.finish('item',dict(state='error'),False)
    self.assertEqual(q.db.execute('SELECT count(*) FROM quality_reports').fetchone()[0],0)
   finally:q.close()

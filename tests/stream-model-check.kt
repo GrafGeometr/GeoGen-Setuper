@@ -17,5 +17,22 @@ fun main() {
     check(mergeFindingOrder(sorted, listOf(a, b, legacy, c, fresh.copy(id = "extra", beauty = 1e6))).last() == "extra")
     check(topicLabel("CollinearPoints") == "Коллинеарность")
     check(topicLabel("CustomTheorem") == "CustomTheorem")
+    check(inFindingSection(fresh, "ready"))
+    check(!inFindingSection(fresh.copy(status = "rejected", file = ""), "ready"))
+    check(inFindingSection(fresh.copy(status = "rejected"), "rejected"))
+    check(inFindingSection(fresh.copy(status = "standard"), "rejected"))
+    check(inFindingSection(fresh.copy(status = "timeout"), "timeout"))
+    check(!inFindingSection(fresh.copy(status = "timeout"), "rejected"))
+    val root = java.nio.file.Files.createTempDirectory("finding-model").toFile()
+    try {
+        val condition = java.io.File(root, "conditions/a.txt")
+        condition.parentFile.mkdirs()
+        condition.writeText("Triangle: A, B, C\nD = Midpoint(A, B)\n\nДоказать:\n" + fresh.theorem)
+        val row = parseFinding("new\ttimeout\t${fresh.theorem}\t\treason\t1\tEqualLineSegments\tunverified\t\tconditions/a.txt")!!
+        check(loadFindingCondition(root, row).contains("D = Midpoint(A, B)"))
+        val outside = java.io.File(root, "private.txt"); outside.writeText("secret")
+        check(!loadFindingCondition(root, row.copy(conditionFile = "private.txt")).contains("secret"))
+        check(!loadFindingCondition(root, row.copy(conditionFile = "../private.txt")).contains("secret"))
+    } finally { root.deleteRecursively() }
     println("STREAM_MODEL_OK: legacy/new metadata, missing scores, topics, stable arrival order and explicit beauty sorting")
 }

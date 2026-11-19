@@ -186,8 +186,36 @@ class StreamingTests(unittest.TestCase):
             queue.export({'phase': 'finished'})
             rows = (self.job / 'results.tsv').read_text().splitlines()
             self.assertEqual(len(rows), 1)
-            self.assertEqual(len(rows[0].split('\t')), 7)
+            self.assertEqual(len(rows[0].split('\t')), 10)
             self.assertIn('error', rows[0])
+        finally:
+            queue.close()
+
+    def test_conditions_survive_rejection_timeout_and_legacy_refresh(self):
+        for i, state in enumerate(['rejected', 'timeout', 'standard']):
+            self.publish(self.event(f'story_{i}'))
+        queue = streaming.Queue(self.job)
+        try:
+            queue.ingest()
+            for i, state in enumerate(['rejected', 'timeout', 'standard']):
+                queue.finish(f'story_{i}', {'state': state, 'message': 'reason'}, False)
+            queue.export({'phase': 'finished'})
+            rows = [line.split('\t') for line in (self.job / 'results.tsv').read_text().splitlines()]
+            for row in rows:
+                self.assertEqual(row[3], '')
+                text = (self.job / row[9]).read_text()
+                self.assertIn('Triangle:', text)
+                self.assertIn('Доказать:', text)
+                self.assertIn(self.event()['theorem'], text)
+            path = self.job / rows[0][9]
+            stamp = path.stat().st_mtime_ns
+            queue.export({'phase': 'finished'})
+            self.assertEqual(path.stat().st_mtime_ns, stamp)
+            path.unlink()  # Simulate an old job with no condition files.
+            queue.close()
+            queue = streaming.Queue(self.job)
+            queue.export({'phase': 'finished'})
+            self.assertTrue(path.is_file())
         finally:
             queue.close()
 
@@ -207,7 +235,7 @@ class StreamingTests(unittest.TestCase):
             self.assertEqual([row[0] for row in before], [row[0] for row in after])
             self.assertEqual(float(after[0][5]), 4051.612345)
             self.assertEqual(after[0][6], 'EqualLineSegments')
-            self.assertEqual(after[1][5:], ['0', 'CollinearPoints'])
+            self.assertEqual(after[1][5:7], ['0', 'CollinearPoints'])
             # Reopening an old job recovers scores from saved events, without a new search.
             queue.close()
             queue = streaming.Queue(self.job)
@@ -224,7 +252,7 @@ class StreamingTests(unittest.TestCase):
             queue.ingest()
             queue.export({'phase': 'finished'})
             for line in (self.job / 'results.tsv').read_text().splitlines():
-                self.assertEqual(line.split('\t')[5:], ['', 'Unknown'])
+                self.assertEqual(line.split('\t')[5:7], ['', 'Unknown'])
         finally:
             queue.close()
 
@@ -241,7 +269,7 @@ class StreamingTests(unittest.TestCase):
             self.assertTrue(streaming.refresh_results(self.job))
             worker.assert_not_called()
         cols = (self.job / 'results.tsv').read_text().splitlines()[0].split('\t')
-        self.assertEqual(cols[5:], ['1234.56789', 'EqualLineSegments'])
+        self.assertEqual(cols[5:7], ['1234.56789', 'EqualLineSegments'])
         with sqlite3.connect(self.job / 'tasks.sqlite') as db:
             self.assertEqual(db.execute('SELECT finished FROM tasks').fetchone()[0], finished)
         self.assertEqual(json.loads((self.job / 'run-state.json').read_text())['phase'], 'finished')
