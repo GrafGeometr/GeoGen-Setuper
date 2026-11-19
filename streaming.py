@@ -80,7 +80,11 @@ class Queue:
                 for key in ('configuration', 'theorem', 'readable'):
                     if not isinstance(event.get(key), str) or not event[key].strip():
                         raise ValueError('Missing event field: ' + key)
-                fingerprint = hashlib.sha256((event['configuration'] + '\0' + event['theorem']).encode()).hexdigest()
+                premise=event.get('condition')
+                if premise is not None and (not isinstance(premise,str) or not premise.strip()): raise ValueError('Invalid condition')
+                key=event['configuration']+'\0'+event['theorem']
+                if premise: key+='\0Assume:'+premise
+                fingerprint = hashlib.sha256(key.encode()).hexdigest()
                 previous = self.db.execute('SELECT id FROM tasks WHERE fingerprint=? AND state!=? LIMIT 1',
                                            (fingerprint, 'duplicate')).fetchone()
                 if previous:
@@ -132,9 +136,9 @@ class Queue:
             condition_name = hashlib.sha256(row['id'].encode('utf-8')).hexdigest() + '.txt'
             if condition_name not in self.saved_conditions:
                 atomic_text(self.conditions / condition_name,
-                            event.get('configuration', '').rstrip() + '\n\nДоказать:\n' + event.get('theorem', '') + '\n')
+                            event.get('configuration', '').rstrip() + ('\n\nДополнительное условие:\n'+event['condition'] if event.get('condition') else '') + '\n\nДоказать:\n' + event.get('theorem', '') + '\n')
                 self.saved_conditions.add(condition_name)
-            fields += ('conditions/' + condition_name,)
+            fields += ('conditions/' + condition_name,(event.get('condition') or ''))
             lines.append('\t'.join(safe_text(x) for x in fields))
         atomic_text(self.job / 'results.tsv', '\n'.join(lines) + ('\n' if lines else ''))
         display_phase = metadata['phase']
@@ -185,12 +189,21 @@ def process_event(job, identifier, event, extending=True, check_ms=1000, standar
     quality_report = None
     try:
         if standard:
-            from standard_reasoning import check, verify_certificate
-            proof = check(event['configuration'], event['theorem'])
-            if proof['status'] == 'proved' and proof['cost'] <= 12 and verify_certificate(event['configuration'], event['theorem'], proof):
+            from standard_reasoning import check, verify_certificate, check_conditional, verify_conditional_certificate
+            premise=event.get('condition')
+            proof = check_conditional(event['configuration'],premise,event['theorem']) if premise else check(event['configuration'], event['theorem'])
+            if proof['status'] == 'proved' and proof['cost'] <= 12 and (verify_conditional_certificate(event['configuration'],premise,event['theorem'],proof) if premise else verify_certificate(event['configuration'], event['theorem'], proof)):
                 atomic_text(task_dir / 'standard-proof.json', json.dumps(proof, ensure_ascii=False, indent=2))
                 return {'state': 'standard', 'message': 'Короткое стандартное доказательство: ' + proof['method']}
-        if extending:
+        condition_report=None
+        if event.get('condition') and extending:
+            from conditional import check_event
+            condition_report=check_event(event,task_dir,check_ms)
+            diagnostic.write_text(json.dumps(condition_report,ensure_ascii=False,indent=2))
+            status=condition_report['status']
+            if status!='accepted':
+                return {'state':status if status in ('timeout','error','rejected') else 'review','message':str(condition_report.get('message',status)),'conditional':condition_report}
+        if extending and not event.get('condition'):
             check_file = task_dir / 'check.geo'
             text = event['configuration'].rstrip() + '\n' + event['theorem'] + '\n\n\n\n\n'
             check_file.write_text(''.join('!' + line + '\n' for line in text.splitlines()), encoding='utf-8')
@@ -218,7 +231,7 @@ def process_event(job, identifier, event, extending=True, check_ms=1000, standar
                 return {'state': status, 'message': str(response.get('message', ''))}
         if quality_checks:
             from quality import inspect_event, description
-            quality_report = inspect_event(event, app.EXTENDING, task_dir, **(quality_checks if isinstance(quality_checks,dict) else {}))
+            quality_report = inspect_event(event, app.EXTENDING, task_dir, condition_report=condition_report, **(quality_checks if isinstance(quality_checks,dict) else {}))
             if quality_report['verdict'] == 'standard':
                 return {'state':'standard','message':'Короткое стандартное доказательство: '+quality_report['standard']['method'], 'quality':quality_report}
         readable = task_dir / 'theorem.txt'
@@ -240,6 +253,9 @@ def process_event(job, identifier, event, extending=True, check_ms=1000, standar
         filename = finding_filename(identifier, event)
         files[0].replace(job / 'geo' / filename)
         result = {'state': 'ready' if extending else 'unchecked', 'geo': filename}
+        if condition_report is not None:
+            result['conditional']=condition_report
+            result['message']='Условие существенно; '+str(condition_report['samples'])+' условных проб; проверено ослаблений: '+str(condition_report.get('weakening',{}).get('completedVariants','?'))
         if quality_report is not None:
             result['quality'] = quality_report
             if quality_report['verdict'] == 'review':
@@ -375,6 +391,11 @@ def run_stream(input_file, job, *, workers=2, extending=True, check_ms=1000, tim
     config = job / 'settings.json'
     atomic_text(config, json.dumps(settings, ensure_ascii=False, indent=2))
     env = os.environ.copy()
+    if env.get('GEOGEN_CONDITIONS_CONFIG'):
+        snapshot=job/'conditions-config.json'
+        shutil.copyfile(env['GEOGEN_CONDITIONS_CONFIG'],snapshot)
+        env['GEOGEN_CONDITIONS_CONFIG']=str(snapshot)
+        env['GEOGEN_CONDITIONS_OUTPUT']=str(job)
     env['DOTNET_ROOT'] = str(app.DOTNET.parent)
     env['DOTNET_MULTILEVEL_LOOKUP'] = '0'
     env['DOTNET_PROCESSOR_COUNT'] = str(max(1, workers))

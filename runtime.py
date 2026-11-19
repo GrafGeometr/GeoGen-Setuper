@@ -54,6 +54,30 @@ def check(directory: Path, *, timeout=300):
     directory = directory.resolve()
     if not directory.is_dir():
         raise RuntimeError(f'Нет каталога: {directory}')
+    base_names=[p.name.removeprefix('BAD_') for p in directory.glob('*.geo')]
+    if len(base_names)!=len(set(base_names)):raise RuntimeError('Одновременно существуют BAD_ и обычная версия одной задачи; разберите конфликт имён.')
+    from conditional import read_geo_event, check_event
+    conditional_files=[(p,read_geo_event(p)) for p in sorted(directory.glob('*.geo'))]
+    if any(event for _,event in conditional_files):
+        report={'conditional':{},'ordinary':{},'notice':'Условные задачи проверены с сохранением посылки при ослаблении каждого построения; численные проверки не являются доказательством.'}
+        with tempfile.TemporaryDirectory(prefix='check-') as temporary:
+            ordinary=Path(temporary)/'ordinary';ordinary.mkdir()
+            for p,event in conditional_files:
+                if event:
+                    result=check_event(event,directory/'conditional-checks'/p.stem,max(1,min(3600000,int(timeout*1000))))
+                    report['conditional'][p.name]=result
+                    if result['status'] in ('accepted','rejected'):
+                        target=directory/(('BAD_' if result['status']=='rejected' else '')+p.name.removeprefix('BAD_'))
+                        if target!=p:p.rename(target)
+                else: shutil.copy2(p,ordinary/p.name)
+            if any(ordinary.glob('*.geo')):
+                report['ordinary']=check(ordinary,timeout=timeout)
+                for p in ordinary.glob('BAD_*.geo'):
+                    source=directory/p.name.removeprefix('BAD_')
+                    if source.exists():source.rename(directory/p.name)
+        (directory/'extending-report.json').write_text(json.dumps(report,ensure_ascii=False,indent=2))
+        print(json.dumps(report,ensure_ascii=False,indent=2))
+        return report
     names = sorted(p.name.removeprefix('BAD_') for p in directory.glob('*.geo'))
     if not names:
         raise RuntimeError('В каталоге нет файлов .geo')
@@ -85,6 +109,34 @@ def require_metric_bundle():
             raise ValueError('Несовместимые компоненты дополнительных теорем: ' + relative)
 
 
+def require_conditional_bundle():
+    marker = ROOT / 'data/conditional-search.json'
+    if not marker.is_file(): raise ValueError('Пересоберите комплект: нет поддержки условных задач')
+    for relative, expected in json.loads(marker.read_text())['sha256'].items():
+        path=ROOT/relative
+        if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest()!=expected:
+            raise ValueError('Несовместимые компоненты условного поиска: '+relative)
+
+
+def require_conditional_extending_bundle():
+    marker=ROOT/'data/conditional-extending.json'
+    if not marker.is_file():raise ValueError('Пересоберите комплект: нет условного Extending')
+    for relative,expected in json.loads(marker.read_text())['sha256'].items():
+        path=ROOT/relative
+        if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest()!=expected:
+            raise ValueError('Несовместимые компоненты условного Extending: '+relative)
+
+
+def configure_conditions(path):
+    if not path.is_file(): raise ValueError('Нет файла --conditions-config')
+    require_conditional_bundle()
+    data=json.loads(path.read_text(encoding='utf-8-sig'))
+    allowed={'version','seconds','seed','types','conditions','maxconditionsperconfiguration','samples','starts','iterations','requirelastobject','minsampledistance','tracefile'}
+    if not isinstance(data,dict) or set(k.lower() for k in data)-allowed:
+        raise ValueError('Неизвестные поля conditions-config')
+    os.environ['GEOGEN_CONDITIONS_CONFIG']=str(path.resolve())
+
+
 def job_settings(job: Path):
     settings = json.loads((ROOT / 'data/default-settings.json').read_text(encoding='utf-8-sig'))
     extra = os.environ.get('GEOGEN_EXTRA_THEOREMS', '').split(',')
@@ -93,6 +145,9 @@ def job_settings(job: Path):
         allowed={'LengthRatio2','LengthRatio3','SquaredLengthRatio2','EqualAngles'}
         if not set(extra)<=allowed: raise ValueError('Unsupported extra theorem type')
         settings['TheoremFindingSettings']['SoughtTheoremTypes'] += [t for t in extra if t not in settings['TheoremFindingSettings']['SoughtTheoremTypes']]
+    if os.environ.get('GEOGEN_CONDITIONS_CONFIG'):
+        require_conditional_bundle()
+        settings.setdefault('TheoremProverSettings',{}).update(AssumeThatSimplifiableTheoremsAreTrue=False,FindTrivialTheoremsOnlyForLastObject=False,InferFromSymmetry=False)
     settings['Serilog']['WriteTo'] = [{'Name': 'Console'}]
     settings['ProblemGeneratorInputProviderSettings']['InputFolderPath'] = str(job / 'inputs')
     settings['InferenceRuleProviderSettings']['RuleFolderPath'] = str(ROOT / 'data/inference-rules')
@@ -297,6 +352,9 @@ SymmetryGenerationMode: GenerateBothSymmetricAndAsymmetric
     diagram_result = json.loads(diagram.stdout)
     if diagram_result.get('checked') != 1 or diagram_result.get('failures'):
         raise RuntimeError('Geometry could not evaluate its control diagram headlessly.')
+    if (ROOT/'data/conditional-search.json').is_file():
+        from conditional import smoke as conditional_smoke
+        conditional_smoke(output/'conditional')
     print('SMOKE OK: GeoGen → JVM-конвертер → .geo; Extending на контрольных примерах; Geometry упакован.')
 
 
@@ -323,6 +381,7 @@ def main():
     run.add_argument('--no-check', action='store_true')
     run.add_argument('--quality-checks', action='store_true', help='Проверять истинность на независимых точных картинках')
     run.add_argument('--standard-checks', action='store_true', help='Отсеивать короткие точные угловые/аффинные следствия')
+    run.add_argument('--conditions-config',type=Path,help='Условия на последнем шаге; численный поиск на C#')
     run.add_argument('--search-config',type=Path,help='JSON-настройки поиска по числу теорем; ядро C#')
     run.add_argument('--experimental-relations',action='store_true',help='Ограниченно выбирать построения по совместным связям внутри GeoGen (эксперимент)')
     run.add_argument('--relation-target',type=float,default=.2)
@@ -346,6 +405,7 @@ def main():
     discover.add_argument('--check-ms', type=int, default=1000)
     discover.add_argument('--view', action='store_true')
     discover.add_argument('--software', action='store_true')
+    discover.add_argument('--conditions-config',type=Path)
     discover.add_argument('--extra-theorems', nargs='+', choices=['LengthRatio2','LengthRatio3','SquaredLengthRatio2','EqualAngles'])
     commands.add_parser('catalog', help='Показать каталог построений и поддержку исходных конфигураций')
     calibration=commands.add_parser('calibrate-search',help='Контрольная статистика исходного GeoGen по сюжетам, seeds и первым построениям')
@@ -438,6 +498,7 @@ def main():
                                   proposed=sum(s['proposed'] for s in trace['trace']),
                                   drawn=sum(s['drawn'] for s in trace['trace']),scope=trace['scope']),ensure_ascii=False))
     elif args.command == 'discover':
+        if args.conditions_config: configure_conditions(args.conditions_config)
         if args.extra_theorems: os.environ['GEOGEN_EXTRA_THEOREMS']=','.join(args.extra_theorems)
         from discovery import create, seconds
         if args.software:
@@ -449,6 +510,9 @@ def main():
     elif args.command == 'catalog':
         print((ROOT / 'data/construction-catalog.json').read_text())
     elif args.command == 'run':
+        if args.conditions_config:
+            if args.batch or args.experimental_relations: parser.error('--conditions-config: потоковый режим без Python-сэмплера')
+            configure_conditions(args.conditions_config)
         if args.extra_theorems: os.environ['GEOGEN_EXTRA_THEOREMS']=','.join(args.extra_theorems)
         if args.search_config:
             if args.experimental_relations:parser.error('--search-config нельзя сочетать с --experimental-relations')

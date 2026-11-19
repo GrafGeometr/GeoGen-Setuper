@@ -160,9 +160,10 @@ fun StreamView(job: File, globalFile: File, window: ComposeWindow, fullscreen: B
                 TextButton({ showCondition = true }) { Text("Условие") }
                 if (row.file.isNotBlank()) TextButton({ showCondition = false }) { Text("Чертёж") }
             }
-            if (row != null) Column(Modifier.fillMaxWidth().height(100.dp).background(Color(0xfff2f3f5)).padding(8.dp)) {
-                Text(topicLabel(row.topic), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.subtitle2)
+            if (row != null) Column(Modifier.fillMaxWidth().height(if (row?.condition?.isNotBlank() == true) 120.dp else 100.dp).background(Color(0xfff2f3f5)).padding(8.dp)) {
+                Text((if (row.condition.isNotBlank()) "Условная задача · " else "") + topicLabel(row.topic), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.subtitle2)
                 Text("Красота GeoGen: ${beautyLabel(row.beauty)} · ${labels[row.status] ?: row.status}", style = MaterialTheme.typography.body2)
+                if (row.condition.isNotBlank()) Text("Условие: ${row.condition}. При перемещении вершин оно может нарушиться.", style = MaterialTheme.typography.caption, maxLines = 1)
                 Text(qualityLabel(row.quality), style = MaterialTheme.typography.caption)
                 if (row.detail.isNotBlank()) Text(row.detail, style = MaterialTheme.typography.caption, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }

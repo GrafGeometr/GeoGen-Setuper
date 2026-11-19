@@ -31,7 +31,7 @@ def backend_key(catalog):
     from standard_reasoning import VERSION as reasoning_version
     build = app.ROOT / 'BUILD.json'
     return digest({'catalog': catalog.data, 'build': build.read_text() if build.exists() else '', 'reasoning': reasoning_version, 'quality': 1,
-                   'modules': {name: digest((app.ROOT / name).read_text()) for name in ('families.py', 'discovery.py', 'standard_reasoning.py', 'streaming.py', 'quality.py') if (app.ROOT / name).exists()}})
+                   'modules': {name: digest((app.ROOT / name).read_text()) for name in ('families.py', 'discovery.py', 'standard_reasoning.py', 'streaming.py', 'quality.py', 'conditional.py') if (app.ROOT / name).exists()}})
 
 
 class CampaignQueue(Queue):
@@ -68,13 +68,15 @@ class CampaignQueue(Queue):
                     raise ValueError('Invalid event schema/id')
                 if any(not isinstance(event.get(k), str) or not event[k].strip() for k in ('configuration', 'theorem', 'readable')):
                     raise ValueError('Missing event fields')
+                premise=event.get('condition')
+                if premise is not None and (not isinstance(premise,str) or not premise.strip()):raise ValueError('Invalid condition')
                 event.update(id=global_id, sourceJob=identifier, sourceEventId=local_id)
                 try:
                     fingerprint = canonical_event(event, self.catalog)
                     event['deduplication'] = 'structural'
                 except (ValueError, KeyError, TypeError, IndexError):
                     # Unknown notation is never geometrically merged on a guess.
-                    fingerprint = digest([event['configuration'], event['theorem']])
+                    fingerprint = digest([event['configuration'], event['theorem']]+(['Assume',event['condition']] if event.get('condition') else []))
                     event['deduplication'] = 'exact-text'
                 previous = self.db.execute('SELECT owner FROM candidate_keys WHERE fingerprint=?', (fingerprint,)).fetchone()
                 if previous:
@@ -137,7 +139,11 @@ def create(family_file, output, *, budget, search_workers=2, check_workers=2, ch
     for i, story in enumerate(family.stories):
         atomic_text(output / f'family/story-{i:04}.txt', story.text())
     atomic_text(output / 'family/catalog.json', json.dumps(catalog.data, ensure_ascii=False, indent=2))
-    metadata = {'kind': 'campaign', 'version': 1, 'phase': 'created', 'searchState': 'stopped',
+    condition_path=os.environ.get('GEOGEN_CONDITIONS_CONFIG')
+    if condition_path:
+        if any(story.layout!='Triangle' for story in family.stories):raise ValueError('Conditional search: Triangle only')
+        atomic_text(output/'family/conditions-config.json',Path(condition_path).read_text())
+    metadata = {'conditionalSearch':bool(condition_path),'kind': 'campaign', 'version': 1, 'phase': 'created', 'searchState': 'stopped',
                 'extraTheorems': [t for t in os.environ.get('GEOGEN_EXTRA_THEOREMS','').split(',') if t],
                 'createdAt': time.time(), 'budgetSeconds': budget, 'spentSeconds': 0,
                 'searchWorkers': search_workers, 'checkWorkers': check_workers, 'checkMs': check_ms,
@@ -190,6 +196,7 @@ def _start_search_unchecked(queue, row):
     settings['ProblemGenerationRunnerSettings']['StreamingOutputFolder'] = str(source / 'events')
     atomic_text(source / 'settings.json', json.dumps(settings, ensure_ascii=False))
     env = os.environ.copy()
+    if env.get('GEOGEN_CONDITIONS_CONFIG'):env['GEOGEN_CONDITIONS_OUTPUT']=str(source)
     env.update(DOTNET_ROOT=str(app.DOTNET.parent), DOTNET_MULTILEVEL_LOOKUP='0', DOTNET_PROCESSOR_COUNT='1')
     log = (source / 'geogen.log').open('w')
     try:
@@ -227,6 +234,8 @@ def run(output, *, extra_budget=0, search_workers=None, check_workers=None, retr
     with job_lock(output):
         metadata = json.loads((output / 'run-state.json').read_text())
         os.environ['GEOGEN_EXTRA_THEOREMS'] = ','.join(metadata.get('extraTheorems', []))
+        if metadata.get('conditionalSearch'):os.environ['GEOGEN_CONDITIONS_CONFIG']=str(output/'family/conditions-config.json')
+        else:os.environ.pop('GEOGEN_CONDITIONS_CONFIG',None)
         if metadata.get('kind') != 'campaign' or metadata.get('version') != 1:
             raise ValueError('Неизвестный формат кампании')
         current_catalog = Catalog.read(app.ROOT / 'data/construction-catalog.json')

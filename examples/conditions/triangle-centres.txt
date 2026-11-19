@@ -1,0 +1,15 @@
+Constructions:
+PerpendicularProjectionOnLineFromPoints
+Orthocenter
+
+Initial configuration:
+Triangle: A, B, C
+O = Circumcenter(A, B, C)
+H = Orthocenter(A, B, C)
+I = Incenter(A, B, C)
+
+Iterations: 1
+MaximalPoints: 1
+MaximalLines: 0
+MaximalCircles: 0
+SymmetryGenerationMode: GenerateBothSymmetricAndAsymmetric

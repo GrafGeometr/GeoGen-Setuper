@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "seconds": 600,
+  "seed": 61,
+  "types": ["CollinearPoints", "ConcyclicPoints", "ParallelLines", "PerpendicularLines", "EqualLineSegments"],
+  "samples": 8,
+  "starts": 80,
+  "iterations": 60,
+  "requireLastObject": true,
+  "minSampleDistance": 0.04
+}

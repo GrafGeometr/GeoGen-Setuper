@@ -1,0 +1,904 @@
+diff --git a/Source/Launchers/GeoGen.DrawingLauncher/MetapostDrawer/MetapostDrawer.cs b/Source/Launchers/GeoGen.DrawingLauncher/MetapostDrawer/MetapostDrawer.cs
+--- a/Source/Launchers/GeoGen.DrawingLauncher/MetapostDrawer/MetapostDrawer.cs
++++ b/Source/Launchers/GeoGen.DrawingLauncher/MetapostDrawer/MetapostDrawer.cs
+@@ -154,6 +154,7 @@
+         /// <returns>The MetaPost figure.</returns>
+         private MetapostFigure CreateFigure(RankedTheorem rankedTheorem, int id)
+         {
++            if(rankedTheorem.Conditional!=null)throw new DrawingLauncherException("Conditional diagrams require the Geometry suite converter, which preserves the condition and its witness coordinates.");
+             // Construct flexible symmetry-aware pictures
+             var pictures = _constructor.ConstructWithFlexibleLayoutRespectingSymmetry(rankedTheorem.Configuration, rankedTheorem.Theorem, _settings.NumberOfPictures);
+ 
+diff --git a/Source/Launchers/GeoGen.MainLauncher/BusinessLogic/ProblemGenerationRunner/ProblemGenerationRunner.cs b/Source/Launchers/GeoGen.MainLauncher/BusinessLogic/ProblemGenerationRunner/ProblemGenerationRunner.cs
+--- a/Source/Launchers/GeoGen.MainLauncher/BusinessLogic/ProblemGenerationRunner/ProblemGenerationRunner.cs
++++ b/Source/Launchers/GeoGen.MainLauncher/BusinessLogic/ProblemGenerationRunner/ProblemGenerationRunner.cs
+@@ -317,6 +317,9 @@
+                             configurationIndex = numberOfGeneratedConfigurations,
+                             configuration = record.ConfigurationString,
+                             theorem = record.TheoremString,
++                            condition=record.ConditionString,
++                            conditionSamples=record.ConditionSamples,
++                            conditionSettings=record.ConditionSettings,
+                             ranking = ranked.Ranking.TotalRanking,
+                             readable = RankedTheoremsToString(new[] { ranked })
+                         });
+@@ -398,6 +401,7 @@
+                     // And the configuration
+                     $"{formatter.FormatConfiguration(generatorOutput.Configuration)}";
+ 
++                if(generatorOutput.Conditional!=null)headerWithConfiguration += "\n\nAssume: "+formatter.FormatTheorem(generatorOutput.Conditional.Assumption);
+                 #region Writing to the writer of readable output without proofs
+ 
+                 // If there is anything interesting to write
+@@ -554,8 +558,13 @@
+                 // Add the configuration
+                 result += formatter.FormatConfiguration(rankedTheorem.Configuration);
+ 
++                if(rankedTheorem.Conditional!=null){
++                    var sample=rankedTheorem.Conditional.Samples[0];
++                    result += "\n\nAssume: "+formatter.FormatTheorem(rankedTheorem.Conditional.Assumption)+
++                        "\nWitness: "+sample[0].ToString("R",System.Globalization.CultureInfo.InvariantCulture)+", "+sample[1].ToString("R",System.Globalization.CultureInfo.InvariantCulture);
++                }
+                 // Add the theorem
+-                result += $"\n\n{formatter.FormatTheorem(rankedTheorem.Theorem)}" +
++                result += $"{(rankedTheorem.Conditional==null ? "\n\n" : "\n")}{formatter.FormatTheorem(rankedTheorem.Theorem)}" +
+                 // Add the total ranking
+                 $" - total ranking {rankedTheorem.Ranking.TotalRanking.ToStringWithDecimalDot()}\n\n";
+ 
+diff --git a/Source/Launchers/GeoGen.MainLauncher/ConditionalCheckCommand.cs b/Source/Launchers/GeoGen.MainLauncher/ConditionalCheckCommand.cs
+new file mode 100644
+--- /dev/null
++++ b/Source/Launchers/GeoGen.MainLauncher/ConditionalCheckCommand.cs
+@@ -0,0 +1,44 @@
++using System.Diagnostics;
++using System.Text.Json;
++using GeoGen.Core;
++using GeoGen.Constructor;
++using GeoGen.Infrastructure;
++using GeoGen.ProblemGenerator;
++using Ninject;
++namespace GeoGen.MainLauncher;
++
++internal static class ConditionalCheckCommand
++{
++    public static void Run(string path)
++    {
++        var clock=Stopwatch.StartNew();
++        object result;
++        try {
++            using var document=JsonDocument.Parse(File.ReadAllText(path));var input=document.RootElement;
++            var configurationText=input.GetProperty("configuration").GetString();var conditionText=input.GetProperty("condition").GetString();var goalText=input.GetProperty("theorem").GetString();
++            var milliseconds=input.TryGetProperty("milliseconds",out var duration)?duration.GetInt32():15000;
++            if(milliseconds<1||milliseconds>3600000)throw new ArgumentException("Invalid conditional check budget");
++            var (configuration,names)=Parser.ParseConfiguration(configurationText.Split('\n'));
++            var condition=Parser.ParseTheorem(conditionText,names,false);var goal=Parser.ParseTheorem(goalText,names,false);
++            if(condition.Equals(goal)){Console.WriteLine("{\"status\":\"rejected\",\"message\":\"Conclusion repeats the condition\"}");return;}
++            var settings=new ConditionalSearchSettings{Seconds=milliseconds/1000.0,Samples=8,TraceFile=null};
++            using var kernel=NinjectUtilities.CreateKernel().AddConstructor();
++            void Deadline(){if(clock.Elapsed.TotalMilliseconds>=milliseconds)throw new TimeoutException();}
++            var sampler=new ConditionalSampler(kernel.Get<IGeometryConstructor>(),configuration,settings,Deadline);
++            var random=new Random(ConditionalSearchEngine.StableSeed("verify|"+configurationText+"|"+conditionText+"|"+goalText));
++            var roots=sampler.On(condition,random);
++            if(roots.Count<settings.Samples)result=new{status="inconclusive",message="Could not obtain enough distinct regular samples satisfying the condition",samples=roots.Count};
++            else {
++                var counter=roots.FirstOrDefault(s=>!ConditionalPredicate.Holds(s.Picture,goal));
++                if(counter!=null)result=new{status="counterexample",message="The conclusion fails on a sample satisfying the condition",coordinates=counter.Parameters,conditionResidual=ConditionalPredicate.Residual(counter.Picture,condition),goalResidual=ConditionalPredicate.Residual(counter.Picture,goal)};
++                else {
++                    var generic=sampler.Generic(random,12);var counters=ConditionalSearchEngine.Counters(generic,condition,goal);
++                    result=counters.Length<2 ? (object)new{status="inconclusive",message="No sufficient counterexamples without the condition; essentiality is not confirmed",samples=roots.Count,genericSamples=generic.Count} :
++                        new{status="accepted",truth="conditioned-sampled-valid",samples=roots.Count,genericSamples=generic.Count,genericCounterexamples=counters.Length,counterexamples=counters,conditionSamples=roots.Select(s=>s.Parameters).ToArray(),draws=sampler.Draws,seconds=clock.Elapsed.TotalSeconds,notice="Numerical conditional conjecture; ordinary Extending weakening tests are not applied"};
++                }
++            }
++        } catch(TimeoutException){result=new{status="timeout",message="Conditional check exceeded time limit"};}
++        catch(Exception error){result=new{status="error",message=error.Message};}
++        Console.WriteLine(JsonSerializer.Serialize(result,ConditionalSearchSettings.JsonOptions));
++    }
++}
+diff --git a/Source/Launchers/GeoGen.MainLauncher/Program.cs b/Source/Launchers/GeoGen.MainLauncher/Program.cs
+--- a/Source/Launchers/GeoGen.MainLauncher/Program.cs
++++ b/Source/Launchers/GeoGen.MainLauncher/Program.cs
+@@ -31,6 +31,9 @@
+             {
+                 CatalogExporter.Write(customConfigurationFilePaths[1]);
+                 return;
++            }
++            if(customConfigurationFilePaths.Length==2 && customConfigurationFilePaths[0]=="--verify-conditional"){
++                ConditionalCheckCommand.Run(customConfigurationFilePaths[1]);return;
+             }
+             await Application.Run(customConfigurationFilePaths, async (kernel, settings) =>
+         {
+@@ -108,7 +111,8 @@
+                     objectIntroducerData: new ObjectIntroducerData(await kernel.Get<IObjectIntroductionRuleProvider>().GetObjectIntroductionRulesAsync()),
+ 
+                     // Set the prover's settings
+-                    theoremProverSettings: settings.GetSettings<TheoremProverSettings>()
++                    theoremProverSettings: string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("GEOGEN_CONDITIONS_CONFIG")) ?
++                        settings.GetSettings<TheoremProverSettings>() : new TheoremProverSettings(false,false,false)
+                 ))
+                 // And the problem generator and with its settings
+                 .AddProblemGenerator(settings.GetSettings<ProblemGeneratorSettings>())
+diff --git a/Source/Library/GeoGen.Constructor/Pictures/PicturesOfConfiguration.cs b/Source/Library/GeoGen.Constructor/Pictures/PicturesOfConfiguration.cs
+--- a/Source/Library/GeoGen.Constructor/Pictures/PicturesOfConfiguration.cs
++++ b/Source/Library/GeoGen.Constructor/Pictures/PicturesOfConfiguration.cs
+@@ -34,7 +34,7 @@
+         /// </summary>
+         /// <param name="configuration">The configuration that is drawn in the pictures.</param>
+         /// <param name="pictures">The list of pictures that these pictures hold.</param>
+-        private PicturesOfConfiguration(Configuration configuration, IReadOnlyList<Picture> pictures)
++        public PicturesOfConfiguration(Configuration configuration, IReadOnlyList<Picture> pictures)
+             : base(pictures)
+         {
+             Configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
+diff --git a/Source/Library/GeoGen.Core/Theorems/ConditionalProblemData.cs b/Source/Library/GeoGen.Core/Theorems/ConditionalProblemData.cs
+new file mode 100644
+--- /dev/null
++++ b/Source/Library/GeoGen.Core/Theorems/ConditionalProblemData.cs
+@@ -0,0 +1,17 @@
++namespace GeoGen.Core;
++
++/// <summary>One explicit extra premise, sampled input positions and reproducible solver settings.</summary>
++public sealed class ConditionalProblemData
++{
++    public Theorem Assumption { get; }
++    public double[][] Samples { get; }
++    public double[][] GenericSamples { get; }
++    public string SettingsJson { get; }
++    public ConditionalProblemData(Theorem assumption,double[][] samples,string settingsJson,double[][] counterexamples=null)
++    {
++        Assumption=assumption ?? throw new ArgumentNullException(nameof(assumption));
++        Samples=samples ?? throw new ArgumentNullException(nameof(samples));
++        SettingsJson=settingsJson ?? throw new ArgumentNullException(nameof(settingsJson));
++        GenericSamples=counterexamples ?? Array.Empty<double[]>();
++    }
++}
+diff --git a/Source/Library/GeoGen.ProblemAnalyzer/GeneratedProblemAnalyzer.cs b/Source/Library/GeoGen.ProblemAnalyzer/GeneratedProblemAnalyzer.cs
+--- a/Source/Library/GeoGen.ProblemAnalyzer/GeneratedProblemAnalyzer.cs
++++ b/Source/Library/GeoGen.ProblemAnalyzer/GeneratedProblemAnalyzer.cs
+@@ -89,6 +89,12 @@
+                 // Enumerate
+                 .ToArray();
+ 
++            bool SymmetricProblem(Theorem theorem,bool full) {
++                if(output.Conditional==null)return full ? theorem.IsFullySymmetric(output.Configuration) : theorem.IsSymmetric(output.Configuration);
++                var mappings=theorem.GetSymmetryMappings(output.Configuration)
++                    .Where(mapping=>output.Conditional.Assumption.Remap(mapping).Equals(output.Conditional.Assumption));
++                return full ? mappings.Count()==output.Configuration.LooseObjectsHolder.GetSymmetricMappings().Count() : mappings.Any();
++            }
+             // Find the problems that should excluded based on symmetry
+             var notInterestingTheorems = mode switch
+             {
+@@ -96,10 +102,10 @@
+                 SymmetryGenerationMode.GenerateBothSymmetricAndAsymmetric => (IReadOnlyList<Theorem>)Array.Empty<Theorem>(),
+ 
+                 // Detect symmetric theorems
+-                SymmetryGenerationMode.GenerateOnlySymmetric => interestingTheorems.Where(theorem => !theorem.IsSymmetric(output.Configuration)).ToArray(),
++                SymmetryGenerationMode.GenerateOnlySymmetric => interestingTheorems.Where(theorem => !SymmetricProblem(theorem,false)).ToArray(),
+ 
+                 // Detect fully symmetric theorems
+-                SymmetryGenerationMode.GenerateOnlyFullySymmetric => interestingTheorems.Where(theorem => !theorem.IsFullySymmetric(output.Configuration)).ToArray(),
++                SymmetryGenerationMode.GenerateOnlyFullySymmetric => interestingTheorems.Where(theorem => !SymmetricProblem(theorem,true)).ToArray(),
+ 
+                 // Unhandled cases
+                 _ => throw new GeoGenException($"Unhandled value of {nameof(SymmetryGenerationMode)}: {mode}"),
+@@ -119,6 +125,7 @@
+             var rankedInterestingTheorems = interestingTheorems
+                 // Rank given one
+                 .Select(theorem => _ranker.Rank(theorem, output.Configuration, allTheorems))
++                .Select(ranked=>output.Conditional==null ? ranked : new RankedTheorem(ranked.Theorem,ranked.Ranking,ranked.Configuration,output.Conditional))
+                  // By rankings ASC (that's why -)
+                  .OrderBy(rankedTheorem => -rankedTheorem.Ranking.TotalRanking)
+                  // Enumerate
+diff --git a/Source/Library/GeoGen.ProblemGenerator/ConditionalPredicate.cs b/Source/Library/GeoGen.ProblemGenerator/ConditionalPredicate.cs
+new file mode 100644
+--- /dev/null
++++ b/Source/Library/GeoGen.ProblemGenerator/ConditionalPredicate.cs
+@@ -0,0 +1,82 @@
++using GeoGen.AnalyticGeometry;
++using GeoGen.Constructor;
++using GeoGen.Core;
++namespace GeoGen.ProblemGenerator;
++
++/// <summary>Dimensionless signed residuals. Undefined/degenerate statements have no residual.</summary>
++public static class ConditionalPredicate
++{
++    private static double Cross(Point a,Point b,Point c)=>(b.X-a.X)*(c.Y-a.Y)-(b.Y-a.Y)*(c.X-a.X);
++    public static double? Residual(Picture picture,Theorem theorem)
++    {
++        try {
++            var objects=theorem.InvolvedObjectsList;
++            Point P(TheoremObject obj)=>(Point)picture.Construct((BaseTheoremObject)obj);
++            Line L(TheoremObject obj)=>(Line)picture.Construct((BaseTheoremObject)obj);
++            Circle C(TheoremObject obj)=>(Circle)picture.Construct((BaseTheoremObject)obj);
++            double D(LineSegmentTheoremObject s)=>MetricRelations.SquaredDistance(P(s.Point1),P(s.Point2));
++            double value;
++            switch(theorem.Type){
++                case TheoremType.CollinearPoints:{
++                    var a=P(objects[0]);var b=P(objects[1]);var c=P(objects[2]);
++                    var scale=Math.Sqrt(MetricRelations.SquaredDistance(a,b)*MetricRelations.SquaredDistance(a,c));
++                    if(scale<1e-12)return null;value=Cross(a,b,c)/scale;break;
++                }
++                case TheoremType.ConcyclicPoints:{
++                    var points=objects.Select(P).ToArray();
++                    if(Math.Abs(Cross(points[0],points[1],points[2]))<1e-7)return null;
++                    var circle=new Circle(points[0],points[1],points[2]);var d=MetricRelations.SquaredDistance(points[3],circle.Center);var r=circle.Radius*circle.Radius;
++                    if(d+r<1e-12)return null;value=(d-r)/(d+r);break;
++                }
++                case TheoremType.ParallelLines:
++                case TheoremType.PerpendicularLines:{
++                    var a=L(objects[0]);var b=L(objects[1]);var scale=Math.Sqrt((a.A*a.A+a.B*a.B)*(b.A*b.A+b.B*b.B));
++                    if(scale<1e-12)return null;
++                    value=theorem.Type==TheoremType.ParallelLines ? (a.A*b.B-a.B*b.A)/scale : (a.A*b.A+a.B*b.B)/scale;break;
++                }
++                case TheoremType.EqualLineSegments:
++                case TheoremType.LengthRatio2:
++                case TheoremType.LengthRatio3:
++                case TheoremType.SquaredLengthRatio2:{
++                    var a=D((LineSegmentTheoremObject)objects[0]);var b=D((LineSegmentTheoremObject)objects[1]);if(Math.Min(a,b)<1e-12)return null;
++                    value=theorem.Type==TheoremType.EqualLineSegments ? (a-b)/(a+b) :
++                        (Math.Max(a,b)-MetricRelations.Factor(theorem.Type)*Math.Min(a,b))/(a+b);break;
++                }
++                case TheoremType.EqualAngles:{
++                    var u=(AngleTheoremObject)objects[0];var v=(AngleTheoremObject)objects[1];
++                    var a=L(u.First);var b=L(u.Second);var c=L(v.First);var d=L(v.Second);
++                    // Imaginary part of (b*c)*conjugate(a*d), divided by its norm.
++                    var bx=b.A*c.A-b.B*c.B;var by=b.A*c.B+b.B*c.A;
++                    var ax=a.A*d.A-a.B*d.B;var ay=a.A*d.B+a.B*d.A;
++                    var scale=Math.Sqrt((ax*ax+ay*ay)*(bx*bx+by*by));if(scale<1e-12)return null;
++                    value=(by*ax-bx*ay)/scale;break;
++                }
++                case TheoremType.ConcurrentLines:{
++                    var a=L(objects[0]);var b=L(objects[1]);var c=L(objects[2]);
++                    var cross=a.A*b.B-a.B*b.A;if(Math.Abs(cross)<1e-7)return null;
++                    var x=(a.B*b.C-a.C*b.B)/cross;var y=(a.C*b.A-a.A*b.C)/cross;
++                    value=(c.A*x+c.B*y+c.C)/(1+Math.Abs(x)+Math.Abs(y)+Math.Abs(c.C));break;
++                }
++                case TheoremType.Incidence:{
++                    var point=objects.OfType<PointTheoremObject>().Single();var other=objects.Single(o=>o!=point);var p=P(point);
++                    if(other is LineTheoremObject){var l=L(other);value=(l.A*p.X+l.B*p.Y+l.C)/(1+Math.Abs(p.X)+Math.Abs(p.Y)+Math.Abs(l.C));}
++                    else {var c=C(other);var d=MetricRelations.SquaredDistance(p,c.Center);var r=c.Radius*c.Radius;if(d+r<1e-12)return null;value=(d-r)/(d+r);}break;
++                }
++                case TheoremType.LineTangentToCircle:{
++                    var l=L(objects.OfType<LineTheoremObject>().Single());var c=C(objects.OfType<CircleTheoremObject>().Single());var d=l.A*c.Center.X+l.B*c.Center.Y+l.C;
++                    var r=c.Radius*c.Radius*(l.A*l.A+l.B*l.B);if(r<1e-12)return null;value=(d*d-r)/(d*d+r);break;
++                }
++                case TheoremType.TangentCircles:{
++                    var a=C(objects[0]);var b=C(objects[1]);var d=MetricRelations.SquaredDistance(a.Center,b.Center);
++                    var x=a.Radius*a.Radius;var y=b.Radius*b.Radius;if(d<1e-10 || Math.Min(x,y)<1e-12)return null;
++                    value=((d-x-y)*(d-x-y)-4*x*y)/((d+x+y)*(d+x+y));break;
++                }
++                default:return null;
++            }
++            return double.IsFinite(value) ? value : null;
++        }
++        catch(Exception e) when(e is AnalyticException or ConstructorException or GeoGenException or ArgumentException or InvalidOperationException or ArithmeticException){return null;}
++    }
++    public static bool Holds(Picture picture,Theorem theorem,double tolerance=2e-8)
++        =>Residual(picture,theorem) is double r && Math.Abs(r)<=tolerance;
++}
+diff --git a/Source/Library/GeoGen.ProblemGenerator/ConditionalSampler.cs b/Source/Library/GeoGen.ProblemGenerator/ConditionalSampler.cs
+new file mode 100644
+--- /dev/null
++++ b/Source/Library/GeoGen.ProblemGenerator/ConditionalSampler.cs
+@@ -0,0 +1,84 @@
++using GeoGen.AnalyticGeometry;
++using GeoGen.Constructor;
++using GeoGen.Core;
++namespace GeoGen.ProblemGenerator;
++
++public sealed record ConditionSample(double[] Parameters,Picture Picture);
++
++/// <summary>Black-box minimum-norm Newton projection for one scalar constraint in triangle shape space.</summary>
++public sealed class ConditionalSampler
++{
++    private readonly IGeometryConstructor _constructor;
++    private readonly Configuration _configuration;
++    private readonly ConditionalSearchSettings _settings;
++    private readonly Action _checkBudget;
++    public long Draws { get; private set; }
++    public long Iterations { get; private set; }
++    public ConditionalSampler(IGeometryConstructor constructor,Configuration configuration,ConditionalSearchSettings settings,Action checkBudget=null)
++    {
++        if(configuration.LooseObjectsHolder.Layout!=LooseObjectLayout.Triangle || configuration.LooseObjects.Count!=3)
++            throw new ArgumentException("Conditional sampling currently supports Triangle only");
++        _constructor=constructor;_configuration=configuration;_settings=settings;_checkBudget=checkBudget;
++    }
++    public ConditionSample Draw(double x,double y)
++    {
++        _checkBudget?.Invoke();Draws++;
++        if(!double.IsFinite(x+y) || x< -2 || x>3 || y<.06 || y>3)return null;
++        try {
++            var (pictures,data)=_constructor.Construct(_configuration,1,()=>new IAnalyticObject[]{new Point(0,0),new Point(1,0),new Point(x,y)});
++            if(pictures==null || data.InconstructibleObject!=null || data.Duplicates!=default)return null;
++            var picture=pictures.First();var points=new List<Point>();
++            foreach(var obj in _configuration.AllObjects){
++                var value=picture.Get(obj);
++                if(value is Point p){
++                    if(!double.IsFinite(p.X+p.Y) || Math.Abs(p.X)>100 || Math.Abs(p.Y)>100)return null;
++                    if(points.Any(q=>MetricRelations.SquaredDistance(p,q)<1e-10))return null;points.Add(p);
++                }
++                if(value is Circle c && (!double.IsFinite(c.Radius) || c.Radius<1e-6 || c.Radius>1000))return null;
++            }
++            return new ConditionSample(new[]{x,y},picture);
++        }
++        catch(Exception e) when(e is AnalyticException or ConstructorException or GeoGenException or ArgumentException or InvalidOperationException or ArithmeticException){return null;}
++    }
++    public List<ConditionSample> Generic(Random random,int count)
++    {
++        var result=new List<ConditionSample>();
++        for(var i=0;i<count*30 && result.Count<count;i++){
++            var sample=Draw(-.6+2.2*random.NextDouble(),.2+1.7*random.NextDouble());if(sample!=null)result.Add(sample);
++        }
++        return result;
++    }
++    private (ConditionSample sample,double residual)? At(Theorem condition,double x,double y)
++    {
++        var sample=Draw(x,y);if(sample==null)return null;
++        var residual=ConditionalPredicate.Residual(sample.Picture,condition);return residual.HasValue ? (sample,residual.Value) : null;
++    }
++    public List<ConditionSample> On(Theorem condition,Random random)
++    {
++        var roots=new List<ConditionSample>();
++        for(var start=0;start<_settings.Starts && roots.Count<_settings.Samples;start++){
++            var current=At(condition,-.6+2.2*random.NextDouble(),.2+1.7*random.NextDouble());
++            for(var iteration=0;current.HasValue && iteration<_settings.Iterations;iteration++){
++                _checkBudget?.Invoke();Iterations++;
++                var (sample,f)=current.Value;var x=sample.Parameters[0];var y=sample.Parameters[1];const double h=1e-5;
++                var xp=At(condition,x+h,y);var xm=At(condition,x-h,y);var yp=At(condition,x,y+h);var ym=At(condition,x,y-h);
++                if(!xp.HasValue||!xm.HasValue||!yp.HasValue||!ym.HasValue)break;
++                var gx=(xp.Value.residual-xm.Value.residual)/(2*h);var gy=(yp.Value.residual-ym.Value.residual)/(2*h);var norm=gx*gx+gy*gy;
++                if(!double.IsFinite(norm)||norm<1e-10)break;
++                if(Math.Abs(f)<1e-12){
++                    if(roots.All(old=>Math.Pow(old.Parameters[0]-x,2)+Math.Pow(old.Parameters[1]-y,2)>=_settings.MinSampleDistance*_settings.MinSampleDistance))roots.Add(sample);
++                    break;
++                }
++                var dx=-f*gx/(norm+1e-12);var dy=-f*gy/(norm+1e-12);var length=Math.Sqrt(dx*dx+dy*dy);
++                if(length>.4){dx*=.4/length;dy*=.4/length;}
++                (ConditionSample sample,double residual)? next=null;
++                for(var scale=1.0;scale>=1.0/128;scale*=.5){
++                    var trial=At(condition,x+scale*dx,y+scale*dy);
++                    if(trial.HasValue && Math.Abs(trial.Value.residual)<Math.Abs(f)){next=trial;break;}
++                }
++                if(!next.HasValue)break;current=next;
++            }
++        }
++        return roots;
++    }
++}
+diff --git a/Source/Library/GeoGen.ProblemGenerator/ConditionalSearchEngine.cs b/Source/Library/GeoGen.ProblemGenerator/ConditionalSearchEngine.cs
+new file mode 100644
+--- /dev/null
++++ b/Source/Library/GeoGen.ProblemGenerator/ConditionalSearchEngine.cs
+@@ -0,0 +1,127 @@
++using System.Diagnostics;
++using System.Security.Cryptography;
++using System.Text;
++using System.Text.Json;
++using GeoGen.ConfigurationGenerator;
++using GeoGen.Constructor;
++using GeoGen.Core;
++using GeoGen.TheoremFinder;
++namespace GeoGen.ProblemGenerator;
++
++internal sealed class ConditionDeadlineException:Exception { }
++
++public sealed class ConditionalSearchEngine : IDisposable
++{
++    private readonly IGeometryConstructor _constructor;
++    private readonly ITheoremFinder _finder;
++    private readonly ConditionalSearchSettings _settings;
++    private readonly Stopwatch _clock=Stopwatch.StartNew();
++    private readonly StreamWriter _trace;
++    private bool _disposed;
++    private int _ordinal;
++    public long Configurations,Terminals,ConditionsTried,GenericConditions,SolvedConditions,FailedSampling,Draws,SolverIterations,GoalsFound,EssentialGoals;
++    public ConditionalSearchEngine(IGeometryConstructor constructor,ITheoremFinder finder,ConditionalSearchSettings settings)
++    {
++        settings.Validate();_constructor=constructor;_finder=finder;_settings=settings;
++        if(settings.TraceFile!=null){Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(settings.TraceFile))!);_trace=new StreamWriter(settings.TraceFile);}
++        Log(new{kind="start",types=settings.Types,settings.Samples,settings.Seconds});
++    }
++    private void CheckBudget(){if(_clock.Elapsed.TotalSeconds>=_settings.Seconds)throw new ConditionDeadlineException();}
++    private void Log(object data){_trace?.WriteLine(JsonSerializer.Serialize(data,ConditionalSearchSettings.JsonOptions));_trace?.Flush();}
++    public static int StableSeed(string text)=>BitConverter.ToInt32(SHA256.HashData(Encoding.UTF8.GetBytes(text)),0);
++    private static IEnumerable<T[]> Combinations<T>(IReadOnlyList<T> values,int count,int from=0)
++    {
++        if(count==0){yield return Array.Empty<T>();yield break;}
++        for(var i=from;i<=values.Count-count;i++)foreach(var tail in Combinations(values,count-1,i+1))yield return new[]{values[i]}.Concat(tail).ToArray();
++    }
++    private static void Shuffle<T>(T[] values,Random random){for(var i=values.Length-1;i>0;i--){var j=random.Next(i+1);(values[i],values[j])=(values[j],values[i]);}}
++    private IEnumerable<Theorem> Candidates(ProblemGeneratorOutput frame,Random random)
++    {
++        var formatter=new OutputFormatter(frame.Configuration.AllObjects);
++        if(_settings.Conditions.Length>0){
++            var names=frame.Configuration.AllObjects.ToDictionary(formatter.GetObjectName);
++            foreach(var text in _settings.Conditions){var condition=Parser.ParseTheorem(text,names,false);if(!_settings.Types.Contains(condition.Type))throw new ArgumentException("Explicit condition type is not enabled");yield return condition;}yield break;
++        }
++        var points=frame.Configuration.AllObjects.Where(o=>o.ObjectType==ConfigurationObjectType.Point).ToArray();Shuffle(points,random);
++        var lines=frame.ContextualPicture.AllLines.Select(line=>line.ConfigurationObject!=null ? new LineTheoremObject(line.ConfigurationObject) :
++            new LineTheoremObject(line.Points.ElementAt(0).ConfigurationObject,line.Points.ElementAt(1).ConfigurationObject))
++            .OrderBy(formatter.FormatTheoremObject,StringComparer.Ordinal).ToArray();Shuffle(lines,random);
++        var segments=Combinations(points,2).Select(p=>new LineSegmentTheoremObject(p[0],p[1])).ToArray();Shuffle(segments,random);
++        IEnumerable<Theorem> OfType(TheoremType type)
++        {
++            if(type==TheoremType.CollinearPoints || type==TheoremType.ConcyclicPoints){
++                foreach(var tuple in Combinations(points,type==TheoremType.CollinearPoints?3:4))yield return new Theorem(type,tuple);
++            }else if(type==TheoremType.EqualLineSegments){
++                foreach(var pair in Combinations(segments,2))yield return new Theorem(type,pair.Cast<TheoremObject>());
++            }else foreach(var pair in Combinations(lines,2))yield return new Theorem(type,pair.Cast<TheoremObject>());
++        }
++        // Round robin prevents the first type from consuming the entire time budget.
++        var streams=_settings.Types.Distinct().Select(t=>OfType(t).GetEnumerator()).ToList();
++        try{while(streams.Count>0)for(var i=0;i<streams.Count;){CheckBudget();if(streams[i].MoveNext()){yield return streams[i].Current;i++;}else{streams[i].Dispose();streams.RemoveAt(i);}}}
++        finally{foreach(var stream in streams)stream.Dispose();}
++    }
++    public IEnumerable<ProblemGeneratorOutput> Wrap(IEnumerable<ProblemGeneratorOutput> ordinary,ProblemGeneratorInput input)
++    {
++        if(input.InitialConfiguration.LooseObjectsHolder.Layout!=LooseObjectLayout.Triangle)throw new ArgumentException("Conditional search currently supports Triangle only");
++        var budget=input.Constructions.Select(c=>c.OutputType).Distinct().Sum(t=>(long)input.MaximalNumbersOfObjectsToAdd[t]);
++        var last=(int)Math.Min(input.NumberOfIterations,budget);
++        try {
++            using var enumerator=ordinary.GetEnumerator();
++            while(true){
++                bool next;try{CheckBudget();next=enumerator.MoveNext();}catch(ConditionDeadlineException){yield break;}
++                if(!next)yield break;
++                Configurations++;var frame=enumerator.Current;if(frame.Configuration.IterationIndex<last)continue;Terminals++;
++                using var conditioned=Explore(frame).GetEnumerator();
++                while(true){try{CheckBudget();next=conditioned.MoveNext();}catch(ConditionDeadlineException){yield break;}if(!next)break;yield return conditioned.Current;}
++            }
++        } finally {Dispose();}
++    }
++    private IEnumerable<ProblemGeneratorOutput> Explore(ProblemGeneratorOutput frame)
++    {
++        var formatter=new OutputFormatter(frame.Configuration.AllObjects);
++        var random=new Random(StableSeed("generate|"+_settings.Seed+"|"+(++_ordinal)+"|"+formatter.FormatConfiguration(frame.Configuration)));
++        var sampler=new ConditionalSampler(_constructor,frame.Configuration,_settings,CheckBudget);
++        try {
++            var generic=sampler.Generic(random,6);if(generic.Count<6)yield break;
++            var known=frame.OldTheorems.AllObjects.Concat(frame.NewTheorems.AllObjects).Distinct().ToArray();var knownSet=known.ToHashSet();
++            var tried=0;
++            foreach(var condition in Candidates(frame,random)){
++                CheckBudget();if(tried++>=_settings.MaxConditionsPerConfiguration)break;ConditionsTried++;
++                if(ConditionsTried%16==0)Log(new{kind="progress",Configurations,Terminals,ConditionsTried,SolvedConditions,FailedSampling,EssentialGoals,draws=Draws+sampler.Draws,seconds=_clock.Elapsed.TotalSeconds});
++                if(condition.Type==TheoremType.CollinearPoints && condition.GetInnerConfigurationObjects().All(o=>frame.Configuration.LooseObjects.Contains(o)))continue;
++                if(generic.Count(s=>ConditionalPredicate.Residual(s.Picture,condition) is double r && Math.Abs(r)>1e-5)<2){GenericConditions++;continue;}
++                var roots=sampler.On(condition,random);
++                if(roots.Count<_settings.Samples){FailedSampling++;continue;}
++                ContextualPicture context;
++                try{context=new ContextualPicture(new PicturesOfConfiguration(frame.Configuration,roots.Select(s=>s.Picture).ToArray()));}
++                catch(InconsistentPicturesException){FailedSampling++;continue;}
++                SolvedConditions++;
++                var candidates=_finder.FindAllTheorems(context).AllObjects.Distinct().ToArray();GoalsFound+=candidates.Length;
++                var goals=new List<Theorem>();
++                foreach(var goal in candidates){
++                    CheckBudget();if(goal.Equals(condition)||knownSet.Contains(goal))continue;
++                    if(_settings.RequireLastObject && frame.Configuration.IterationIndex>0 &&
++                        !goal.GetInnerConfigurationObjects().Contains(frame.Configuration.LastConstructedObject) &&
++                        !condition.GetInnerConfigurationObjects().Contains(frame.Configuration.LastConstructedObject))continue;
++                    if(!roots.All(s=>ConditionalPredicate.Holds(s.Picture,goal)))continue;
++                    if(Counters(generic,condition,goal).Length<2)continue;
++                    goals.Add(goal);
++                }
++                EssentialGoals+=goals.Count;
++                Log(new{kind="condition",configuration=_ordinal,premise=formatter.FormatTheorem(condition),samples=roots.Count,goals=goals.Count,seconds=_clock.Elapsed.TotalSeconds});
++                if(goals.Count==0)continue;
++                var premises=known.Where(t=>roots.All(s=>ConditionalPredicate.Holds(s.Picture,t))).Append(condition);
++                var data=new ConditionalProblemData(condition,roots.Select(s=>s.Parameters).ToArray(),JsonSerializer.Serialize(_settings,ConditionalSearchSettings.JsonOptions),generic.Select(s=>s.Parameters).ToArray());
++                yield return new ProblemGeneratorOutput(frame.Configuration,context,new TheoremMap(premises),new TheoremMap(goals),data);
++            }
++        } finally {Draws+=sampler.Draws;SolverIterations+=sampler.Iterations;}
++    }
++    public static double[][] Counters(IEnumerable<ConditionSample> samples,Theorem condition,Theorem goal)=>samples.Where(s=>
++        ConditionalPredicate.Residual(s.Picture,condition) is double c && Math.Abs(c)>1e-5 &&
++        ConditionalPredicate.Residual(s.Picture,goal) is double g && Math.Abs(g)>1e-5).Select(s=>s.Parameters).Take(2).ToArray();
++    public void Dispose()
++    {
++        if(_disposed)return;_disposed=true;
++        Log(new{kind="finish",seconds=_clock.Elapsed.TotalSeconds,Configurations,Terminals,ConditionsTried,GenericConditions,SolvedConditions,FailedSampling,Draws,SolverIterations,GoalsFound,EssentialGoals});_trace?.Dispose();
++    }
++}
+diff --git a/Source/Library/GeoGen.ProblemGenerator/ConditionalSearchSettings.cs b/Source/Library/GeoGen.ProblemGenerator/ConditionalSearchSettings.cs
+new file mode 100644
+--- /dev/null
++++ b/Source/Library/GeoGen.ProblemGenerator/ConditionalSearchSettings.cs
+@@ -0,0 +1,37 @@
++using System.Text.Json;
++using System.Text.Json.Serialization;
++using GeoGen.Core;
++namespace GeoGen.ProblemGenerator;
++public sealed class ConditionalSearchSettings
++{
++    public int Version { get; set; }=1;
++    public double Seconds { get; set; }=600;
++    public int Seed { get; set; }=61;
++    public TheoremType[] Types { get; set; }=new[]{TheoremType.CollinearPoints,TheoremType.ConcyclicPoints,TheoremType.ParallelLines,TheoremType.PerpendicularLines,TheoremType.EqualLineSegments};
++    public string[] Conditions { get; set; }=Array.Empty<string>();
++    public int MaxConditionsPerConfiguration { get; set; }=int.MaxValue;
++    public int Samples { get; set; }=8;
++    public int Starts { get; set; }=80;
++    public int Iterations { get; set; }=60;
++    public bool RequireLastObject { get; set; }=true;
++    public double MinSampleDistance { get; set; }=.04;
++    public string TraceFile { get; set; }
++    public static JsonSerializerOptions JsonOptions=>new(){PropertyNameCaseInsensitive=true,Converters={new JsonStringEnumConverter()}};
++    public void Validate()
++    {
++        var allowed=new[]{TheoremType.CollinearPoints,TheoremType.ConcyclicPoints,TheoremType.ParallelLines,TheoremType.PerpendicularLines,TheoremType.EqualLineSegments};
++        if(Version!=1 || !double.IsFinite(Seconds)||Seconds<=0 || Samples<4||Samples>32 || Starts<Samples||Starts>1000 || Iterations<1||Iterations>300 ||
++            MaxConditionsPerConfiguration<1 || !double.IsFinite(MinSampleDistance)||MinSampleDistance<=0||MinSampleDistance>.5 || Types==null||Types.Length==0||Types.Any(t=>!allowed.Contains(t)) || Conditions==null||Conditions.Any(string.IsNullOrWhiteSpace))
++            throw new ArgumentException("Invalid conditional search settings; supported premise types: collinearity, concyclicity, parallelism, perpendicularity, equal segments");
++    }
++    public static ConditionalSearchSettings Read(string path)
++    {
++        var settings=JsonSerializer.Deserialize<ConditionalSearchSettings>(File.ReadAllText(path),JsonOptions) ?? throw new ArgumentException("Empty condition settings");settings.Validate();
++        var output=Environment.GetEnvironmentVariable("GEOGEN_CONDITIONS_OUTPUT");
++        if(!string.IsNullOrEmpty(output)){
++            Directory.CreateDirectory(output);settings.TraceFile ??=Path.Combine(output,"conditions-trace.jsonl");
++            File.WriteAllText(Path.Combine(output,"conditions-settings.json"),JsonSerializer.Serialize(settings,JsonOptions));
++        }
++        return settings;
++    }
++}
+diff --git a/Source/Library/GeoGen.ProblemGenerator/ProblemGenerator.cs b/Source/Library/GeoGen.ProblemGenerator/ProblemGenerator.cs
+--- a/Source/Library/GeoGen.ProblemGenerator/ProblemGenerator.cs
++++ b/Source/Library/GeoGen.ProblemGenerator/ProblemGenerator.cs
+@@ -85,9 +85,14 @@
+         {
+             var policyPath = Environment.GetEnvironmentVariable("GEOGEN_THEOREM_SEARCH_CONFIG");
+             var policy = string.IsNullOrWhiteSpace(policyPath) ? null : TheoremSearchSettings.Read(policyPath);
+-            return policy == null || policy.Policy == "soft"
+-                ? GenerateStandard(input, policy)
+-                : GenerateTheoremSearch(input, policy);
++            var ordinary = policy == null || policy.Policy == "soft"
++                ? GenerateStandard(input, policy) : GenerateTheoremSearch(input, policy);
++            var conditionsPath=Environment.GetEnvironmentVariable("GEOGEN_CONDITIONS_CONFIG");
++            if(string.IsNullOrWhiteSpace(conditionsPath))return ordinary;
++            var settings=ConditionalSearchSettings.Read(conditionsPath);
++            if(policy!=null)settings.Seconds=Math.Min(settings.Seconds,policy.Seconds);
++            var engine=new ConditionalSearchEngine(_constructor,_finder,settings);
++            return (ordinary.initialTheorems,engine.Wrap(ordinary.generationOutputs,input));
+         }
+ 
+         /// <summary>The historical DFS and early symmetry pruning; optional bias lives in its verifier.</summary>
+diff --git a/Source/Library/GeoGen.ProblemGenerator/ProblemGeneratorOutput.cs b/Source/Library/GeoGen.ProblemGenerator/ProblemGeneratorOutput.cs
+--- a/Source/Library/GeoGen.ProblemGenerator/ProblemGeneratorOutput.cs
++++ b/Source/Library/GeoGen.ProblemGenerator/ProblemGeneratorOutput.cs
+@@ -15,6 +15,8 @@
+         /// The generated configuration.
+         /// </summary>
+         public GeneratedConfiguration Configuration { get; }
++
++        public ConditionalProblemData Conditional { get; }
+ 
+         /// <summary>
+         /// The contextual picture where the configuration is drawn.
+@@ -42,8 +44,9 @@
+         /// <param name="contextualPicture">The contextual picture where the configuration is drawn.</param>
+         /// <param name="oldTheorems">The found theorems for the configurations that don't use the last object of the configuration.</param>
+         /// <param name="newTheorems">The found theorems for the configurations that use the last object of the configuration.</param>
+-        public ProblemGeneratorOutput(GeneratedConfiguration configuration, ContextualPicture contextualPicture, TheoremMap oldTheorems, TheoremMap newTheorems)
++        public ProblemGeneratorOutput(GeneratedConfiguration configuration, ContextualPicture contextualPicture, TheoremMap oldTheorems, TheoremMap newTheorems, ConditionalProblemData conditional=null)
+         {
++            Conditional=conditional;
+             Configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
+             ContextualPicture = contextualPicture ?? throw new ArgumentNullException(nameof(contextualPicture));
+             OldTheorems = oldTheorems ?? throw new ArgumentNullException(nameof(oldTheorems));
+diff --git a/Source/Library/GeoGen.TheoremProver/TheoremProver.cs b/Source/Library/GeoGen.TheoremProver/TheoremProver.cs
+--- a/Source/Library/GeoGen.TheoremProver/TheoremProver.cs
++++ b/Source/Library/GeoGen.TheoremProver/TheoremProver.cs
+@@ -244,7 +244,7 @@
+             foreach (var provedTheorem in provenTheorems.AllObjects.Concat(trivialTheorems).Concat(theoremsDefinableSimpler))
+             {
+                 // Try to infer new theorems using this one
+-                foreach (var inferredTheorem in provedTheorem.InferTheoremsFromSymmetry(configuration))
++                foreach (var inferredTheorem in _settings.InferFromSymmetry ? provedTheorem.InferTheoremsFromSymmetry(configuration) : Enumerable.Empty<Theorem>())
+                 {
+                     // Add it to the list
+                     theoremsInferredFromSymmetry.Add(inferredTheorem);
+@@ -474,7 +474,7 @@
+             // If the theorem use an object that is not part of the original configuration,
+             // then we will not do any symmetry inference. If it could prove a new theorem,
+             // then this new theorem would be inferable conventionally
+-            if (!normalizedTheorem.GetInnerConfigurationObjects().All(helper.Configuration.AllObjects.Contains))
++            if (!_settings.InferFromSymmetry || !normalizedTheorem.GetInnerConfigurationObjects().All(helper.Configuration.AllObjects.Contains))
+                 return;
+ 
+             // Otherwise try to infer new theorems using this one
+diff --git a/Source/Library/GeoGen.TheoremProver/TheoremProverSettings.cs b/Source/Library/GeoGen.TheoremProver/TheoremProverSettings.cs
+--- a/Source/Library/GeoGen.TheoremProver/TheoremProverSettings.cs
++++ b/Source/Library/GeoGen.TheoremProver/TheoremProverSettings.cs
+@@ -20,6 +20,7 @@
+         /// assumed true, so there is no need to find them again.
+         /// </summary>
+         public bool FindTrivialTheoremsOnlyForLastObject { get; }
++        public bool InferFromSymmetry { get; }
+ 
+         #endregion
+ 
+@@ -30,8 +31,9 @@
+         /// </summary>
+         /// <param name="assumeThatSimplifiableTheoremsAreTrue"><inheritdoc cref="AssumeThatSimplifiableTheoremsAreTrue" path="/summary"/></param>
+         /// <param name="findTrivialTheoremsOnlyForLastObject"><inheritdoc cref="FindTrivialTheoremsOnlyForLastObject" path="/summary"/></param>
+-        public TheoremProverSettings(bool assumeThatSimplifiableTheoremsAreTrue, bool findTrivialTheoremsOnlyForLastObject)
++        public TheoremProverSettings(bool assumeThatSimplifiableTheoremsAreTrue, bool findTrivialTheoremsOnlyForLastObject, bool? inferFromSymmetry=null)
+         {
++            InferFromSymmetry=inferFromSymmetry ?? true;
+             AssumeThatSimplifiableTheoremsAreTrue = assumeThatSimplifiableTheoremsAreTrue;
+             FindTrivialTheoremsOnlyForLastObject = findTrivialTheoremsOnlyForLastObject;
+         }
+diff --git a/Source/Library/GeoGen.TheoremRanker/RankedTheorem.cs b/Source/Library/GeoGen.TheoremRanker/RankedTheorem.cs
+--- a/Source/Library/GeoGen.TheoremRanker/RankedTheorem.cs
++++ b/Source/Library/GeoGen.TheoremRanker/RankedTheorem.cs
+@@ -14,6 +14,8 @@
+         /// The actual theorem that was ranked.
+         /// </summary>
+         public Theorem Theorem { get; }
++
++        public ConditionalProblemData Conditional { get; }
+ 
+         /// <summary>
+         /// The ranking of the <see cref="Theorem"/> with respect to the configuration where it was discovered.
+@@ -35,8 +37,9 @@
+         /// <param name="theorem">The actual theorem that was ranked.</param>
+         /// <param name="ranking">The ranking of the <see cref="Theorem"/> with respect to the configuration where it was discovered.</param>
+         /// <param name="configuration">The configuration where the <see cref="Theorem"/> holds.</param>
+-        public RankedTheorem(Theorem theorem, TheoremRanking ranking, Configuration configuration)
++        public RankedTheorem(Theorem theorem, TheoremRanking ranking, Configuration configuration, ConditionalProblemData conditional=null)
+         {
++            Conditional=conditional;
+             Theorem = theorem ?? throw new ArgumentNullException(nameof(theorem));
+             Ranking = ranking ?? throw new ArgumentNullException(nameof(ranking));
+             Configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
+diff --git a/Source/Library/GeoGen.TheoremRanker.RankedTheoremIO/RankedTheoremIntermediate.cs b/Source/Library/GeoGen.TheoremRanker.RankedTheoremIO/RankedTheoremIntermediate.cs
+--- a/Source/Library/GeoGen.TheoremRanker.RankedTheoremIO/RankedTheoremIntermediate.cs
++++ b/Source/Library/GeoGen.TheoremRanker.RankedTheoremIO/RankedTheoremIntermediate.cs
+@@ -15,6 +15,10 @@
+         /// The string of the actual theorem that was ranked.
+         /// </summary>
+         public string TheoremString { get; }
++        public string ConditionString { get; }
++        public double[][] ConditionSamples { get; }
++        public string ConditionSettings { get; }
++        public double[][] GenericSamples { get; }
+ 
+         /// <summary>
+         /// The ranking of the <see cref="TheoremString"/> with respect to the configuration where it was discovered.
+@@ -36,8 +40,9 @@
+         /// <param name="theoremString">The string of the actual theorem that was ranked.</param>
+         /// <param name="ranking">The ranking of the <see cref="TheoremString"/> with respect to the configuration where it was discovered.</param>
+         /// <param name="configurationString">The string of the configuration where the <see cref="TheoremString"/> holds.</param>
+-        public RankedTheoremIntermediate(string theoremString, TheoremRanking ranking, string configurationString)
++        public RankedTheoremIntermediate(string theoremString, TheoremRanking ranking, string configurationString,string conditionString=null,double[][] conditionSamples=null,string conditionSettings=null,double[][] genericSamples=null)
+         {
++            ConditionString=conditionString;ConditionSamples=conditionSamples;ConditionSettings=conditionSettings;GenericSamples=genericSamples;
+             TheoremString = theoremString ?? throw new ArgumentNullException(nameof(theoremString));
+             Ranking = ranking ?? throw new ArgumentNullException(nameof(ranking));
+             ConfigurationString = configurationString ?? throw new ArgumentNullException(nameof(configurationString));
+@@ -68,7 +73,9 @@
+                 .Replace("{", "").Replace("}", "");
+ 
+             // Return the final object
+-            return new RankedTheoremIntermediate(theoremString, rankedTheorem.Ranking, configurationString);
++            return new RankedTheoremIntermediate(theoremString, rankedTheorem.Ranking, configurationString,
++                rankedTheorem.Conditional==null ? null : formatter.FormatTheorem(rankedTheorem.Conditional.Assumption),
++                rankedTheorem.Conditional?.Samples,rankedTheorem.Conditional?.SettingsJson,rankedTheorem.Conditional?.GenericSamples);
+         }
+ 
+         /// <summary>
+@@ -85,7 +92,10 @@
+             var theorem = Parser.ParseTheorem(rankedTheoremIntermediate.TheoremString, objectNames, autocreateUnnamedObjects: false);
+ 
+             // Return the final object
+-            return new RankedTheorem(theorem, rankedTheoremIntermediate.Ranking, configuration);
++            var conditional=string.IsNullOrWhiteSpace(rankedTheoremIntermediate.ConditionString) ? null :
++                new ConditionalProblemData(Parser.ParseTheorem(rankedTheoremIntermediate.ConditionString,objectNames,false),
++                    rankedTheoremIntermediate.ConditionSamples,rankedTheoremIntermediate.ConditionSettings,rankedTheoremIntermediate.GenericSamples);
++            return new RankedTheorem(theorem, rankedTheoremIntermediate.Ranking, configuration,conditional);
+         }
+ 
+         #endregion
+diff --git a/Source/Library/GeoGen.TheoremSorter/AnalyticTheorem.cs b/Source/Library/GeoGen.TheoremSorter/AnalyticTheorem.cs
+--- a/Source/Library/GeoGen.TheoremSorter/AnalyticTheorem.cs
++++ b/Source/Library/GeoGen.TheoremSorter/AnalyticTheorem.cs
+@@ -34,6 +34,7 @@
+         /// The type of the encoded theorem.
+         /// </summary>
+         private readonly TheoremType _type;
++        private readonly AnalyticTheorem _assumption;
+ 
+         /// <summary>
+         /// The encoded analytic content that correctly implement hash code and equals.
+@@ -49,10 +50,11 @@
+         /// </summary>
+         /// <param name="theorem">The theorem that should be drawn analytically.</param>
+         /// <param name="picture">The picture where the inner objects of the theorem are drawn.</param>
+-        public AnalyticTheorem(Theorem theorem, Picture picture)
++        public AnalyticTheorem(Theorem theorem, Picture picture, Theorem assumption=null)
+         {
+             // Set the type
+             _type = theorem.Type;
++            _assumption=assumption==null ? null : new AnalyticTheorem(assumption,picture);
+ 
+             // Set the content by switching on the type
+             _content = _type switch
+@@ -98,7 +100,7 @@
+         #region HashCode and Equals
+ 
+         /// <inheritdoc/>
+-        public override int GetHashCode() => (_type, _content).GetHashCode();
++        public override int GetHashCode() => _assumption==null ? (_type,_content).GetHashCode() : (_type,_content,_assumption).GetHashCode();
+ 
+         /// <inheritdoc/>
+         public override bool Equals(object otherObject)
+@@ -111,7 +113,8 @@
+                 // And their types are equal
+                 && analyticTheorem._type.Equals(_type)
+                 // And their contents are equal
+-                && analyticTheorem._content.Equals(_content);
++                && analyticTheorem._content.Equals(_content)
++                && Equals(_assumption,analyticTheorem._assumption);
+ 
+         #endregion
+     }
+diff --git a/Source/Library/GeoGen.TheoremSorter/TheoremSorter.cs b/Source/Library/GeoGen.TheoremSorter/TheoremSorter.cs
+--- a/Source/Library/GeoGen.TheoremSorter/TheoremSorter.cs
++++ b/Source/Library/GeoGen.TheoremSorter/TheoremSorter.cs
+@@ -332,7 +332,7 @@
+                 try
+                 {
+                     // And construct the analytic theorem
+-                    var remappedAnalyticTheorem = new AnalyticTheorem(remappedTheorem, picture);
++                    var remappedAnalyticTheorem = new AnalyticTheorem(remappedTheorem, picture, rankedTheorem.Conditional?.Assumption.Remap(objectMapping));
+ 
+                     // If we have an identity mapping, set that the current remapped analytic theorem corresponds to it
+                     if (isThisIdentity)
+diff --git a/Source/Tests/UnitTests/GeoGen.ConfigurationGenerator.Tests/ConditionalSamplerTest.cs b/Source/Tests/UnitTests/GeoGen.ConfigurationGenerator.Tests/ConditionalSamplerTest.cs
+new file mode 100644
+--- /dev/null
++++ b/Source/Tests/UnitTests/GeoGen.ConfigurationGenerator.Tests/ConditionalSamplerTest.cs
+@@ -0,0 +1,97 @@
++using GeoGen.Core;
++using GeoGen.Utilities;
++using GeoGen.Constructor;
++using GeoGen.ProblemGenerator;
++using NUnit.Framework;
++using Ninject;
++using static GeoGen.Core.PredefinedConstructions;
++namespace GeoGen.ConfigurationGenerator.Tests;
++[TestFixture]
++public class ConditionalSamplerTest
++{
++    [Test]
++    public void Samples_an_extra_condition_and_finds_counterexamples_without_it()
++    {
++        var (_,_,_,kernel)=SoftSearchTest.Services();using(kernel){
++            var a=new LooseConfigurationObject(ConfigurationObjectType.Point);var b=new LooseConfigurationObject(ConfigurationObjectType.Point);var c=new LooseConfigurationObject(ConfigurationObjectType.Point);
++            var o=new ConstructedConfigurationObject(ComposedConstructions.Circumcenter,a,b,c);
++            var h=new ConstructedConfigurationObject(ComposedConstructions.Orthocenter,a,b,c);
++            var config=new Configuration(new LooseObjectHolder(new[]{a,b,c},LooseObjectLayout.Triangle),new[]{o,h});
++            var condition=Theorem.DeriveFromFlattenedObjects(TheoremType.EqualLineSegments,new TheoremObject[]{new PointTheoremObject(a),new PointTheoremObject(b),new PointTheoremObject(a),new PointTheoremObject(c)});
++            var goal=new Theorem(TheoremType.CollinearPoints,a,o,h);
++            var settings=new ConditionalSearchSettings{Samples=8,Starts=80};
++            var sampler=new ConditionalSampler(kernel.Get<IGeometryConstructor>(),config,settings);
++            var roots=sampler.On(condition,new Random(61));Assert.That(roots.Count,Is.EqualTo(8));
++            Assert.That(roots.All(s=>ConditionalPredicate.Holds(s.Picture,condition)),Is.True);
++            Assert.That(roots.All(s=>ConditionalPredicate.Holds(s.Picture,goal)),Is.True);
++            var generic=sampler.Generic(new Random(1201),8);
++            Assert.That(generic.Count(s=>Math.Abs(ConditionalPredicate.Residual(s.Picture,condition)??0)>1e-5 && Math.Abs(ConditionalPredicate.Residual(s.Picture,goal)??0)>1e-5),Is.GreaterThanOrEqualTo(2));
++        }
++    }
++    [Test]
++    public void Degenerate_triangle_condition_is_not_accepted_as_a_valid_picture()
++    {
++        var (_,_,_,kernel)=SoftSearchTest.Services();using(kernel){
++            var input=SoftSearchTest.Input(SymmetryGenerationMode.GenerateBothSymmetricAndAsymmetric,1);
++            var config=input.InitialConfiguration;var points=config.LooseObjects;
++            var condition=new Theorem(TheoremType.CollinearPoints,points[0],points[1],points[2]);
++            var sampler=new ConditionalSampler(kernel.Get<IGeometryConstructor>(),config,new ConditionalSearchSettings{Samples=4,Starts=4,Iterations=15});
++            Assert.That(sampler.On(condition,new Random(61)),Is.Empty);
++        }
++    }
++}
++
++[TestFixture]
++public class ConditionalEngineTest
++{
++    [Test]
++    public void Discovers_only_terminal_conditional_goals_with_unconstrained_counterexamples()
++    {
++        var (generator,_,finder,kernel)=SoftSearchTest.Services();using(kernel){
++            var a=new LooseConfigurationObject(ConfigurationObjectType.Point);var b=new LooseConfigurationObject(ConfigurationObjectType.Point);var c=new LooseConfigurationObject(ConfigurationObjectType.Point);
++            var o=new ConstructedConfigurationObject(ComposedConstructions.Circumcenter,a,b,c);
++            var initial=new Configuration(new LooseObjectHolder(new[]{a,b,c},LooseObjectLayout.Triangle),new[]{o});
++            var input=new ProblemGeneratorInput(initial,new[]{(Construction)ComposedConstructions.Orthocenter}.ToReadOnlyHashSet(),1,
++                new Dictionary<ConfigurationObjectType,int>{{ConfigurationObjectType.Point,1},{ConfigurationObjectType.Line,0},{ConfigurationObjectType.Circle,0}},SymmetryGenerationMode.GenerateBothSymmetricAndAsymmetric);
++            var ordinary=generator.GenerateStandard(input).generationOutputs;
++            using var engine=new ConditionalSearchEngine(kernel.Get<IGeometryConstructor>(),finder,new ConditionalSearchSettings{
++                Seconds=20,Types=new[]{TheoremType.EqualLineSegments},Conditions=new[]{"EqualLineSegments: A, B, A, C"}});
++            var results=engine.Wrap(ordinary,input).ToArray();
++            Assert.That(results,Is.Not.Empty);
++            foreach(var frame in results){
++                Assert.That(frame.Configuration.IterationIndex,Is.EqualTo(1));Assert.That(frame.Conditional.Samples.Length,Is.EqualTo(8));
++                Assert.That(frame.NewTheorems.AllObjects.Contains(frame.Conditional.Assumption),Is.False);
++                var sampler=new ConditionalSampler(kernel.Get<IGeometryConstructor>(),frame.Configuration,new ConditionalSearchSettings());
++                var generic=sampler.Generic(new Random(71),12);
++                foreach(var goal in frame.NewTheorems.AllObjects)
++                    Assert.That(ConditionalSearchEngine.Counters(generic,frame.Conditional.Assumption,goal).Length,Is.EqualTo(2));
++            }
++            Assert.That(engine.EssentialGoals,Is.GreaterThan(0));
++        }
++    }
++}
++
++[TestFixture]
++public class ConditionalStorageTest
++{
++    [Test]
++    public void Json_round_trip_and_sorting_preserve_the_joint_premise_and_conclusion()
++    {
++        var (_,_,_,kernel)=SoftSearchTest.Services();using(kernel){
++            var (configuration,names)=Parser.ParseConfiguration(new[]{"Triangle: A, B, C"});
++            var premise=Parser.ParseTheorem("EqualLineSegments: A, B, A, C",names,false);
++            var goal=Parser.ParseTheorem("PerpendicularLines: [A, B], [B, C]",names,false);
++            var ranking=new GeoGen.TheoremRanker.TheoremRanking(new Dictionary<GeoGen.TheoremRanker.RankedAspect,GeoGen.TheoremRanker.RankingData>());
++            var original=new GeoGen.TheoremRanker.RankedTheorem(goal,ranking,configuration,new ConditionalProblemData(premise,new[]{new[]{.5,.8}},"{}"));
++            var intermediate=GeoGen.TheoremRanker.RankedTheoremIO.RankedTheoremIntermediate.Convert(original);
++            var json=Newtonsoft.Json.JsonConvert.SerializeObject(intermediate);
++            var restored=GeoGen.TheoremRanker.RankedTheoremIO.RankedTheoremIntermediate.Convert(Newtonsoft.Json.JsonConvert.DeserializeObject<GeoGen.TheoremRanker.RankedTheoremIO.RankedTheoremIntermediate>(json));
++            Assert.That(restored.Conditional.Samples[0],Is.EqualTo(new[]{.5,.8}));
++            Assert.That(new OutputFormatter(restored.Configuration.AllObjects).FormatTheorem(restored.Conditional.Assumption),Is.EqualTo(new OutputFormatter(configuration.AllObjects).FormatTheorem(premise)));
++            var sorter=new GeoGen.TheoremSorter.TheoremSorter(kernel.Get<IGeometryConstructor>(),new GeoGen.TheoremSorter.EmptySortingGeometryFailureTracer(),20);
++            var different=Parser.ParseTheorem("EqualLineSegments: A, B, B, C",names,false);
++            sorter.AddTheorems(new[]{original,new GeoGen.TheoremRanker.RankedTheorem(goal,ranking,configuration,new ConditionalProblemData(different,new[]{new[]{.5,.8}},"{}")),new GeoGen.TheoremRanker.RankedTheorem(goal,ranking,configuration)},out _);
++            Assert.That(sorter.BestTheorems.Count(),Is.EqualTo(3));
++        }
++    }
++}
+diff --git a/Source/Tests/UnitTests/GeoGen.ConfigurationGenerator.Tests/GeoGen.ConfigurationGenerator.Tests.csproj b/Source/Tests/UnitTests/GeoGen.ConfigurationGenerator.Tests/GeoGen.ConfigurationGenerator.Tests.csproj
+--- a/Source/Tests/UnitTests/GeoGen.ConfigurationGenerator.Tests/GeoGen.ConfigurationGenerator.Tests.csproj
++++ b/Source/Tests/UnitTests/GeoGen.ConfigurationGenerator.Tests/GeoGen.ConfigurationGenerator.Tests.csproj
+@@ -22,4 +22,8 @@
+ 		<ProjectReference Include="..\..\..\Library\GeoGen.Utilities\GeoGen.Utilities.csproj" />
+ 	</ItemGroup>
+ 
++    <ItemGroup>
++        <ProjectReference Include="../../../Library/GeoGen.TheoremSorter/GeoGen.TheoremSorter.csproj" />
++        <ProjectReference Include="../../../Library/GeoGen.TheoremRanker.RankedTheoremIO/GeoGen.TheoremRanker.RankedTheoremIO.csproj" />
++    </ItemGroup>
+ </Project>
+diff --git a/Source/Tests/UnitTests/GeoGen.TheoremProver.Tests/ConditionalSymmetryTest.cs b/Source/Tests/UnitTests/GeoGen.TheoremProver.Tests/ConditionalSymmetryTest.cs
+new file mode 100644
+--- /dev/null
++++ b/Source/Tests/UnitTests/GeoGen.TheoremProver.Tests/ConditionalSymmetryTest.cs
+@@ -0,0 +1,32 @@
++using GeoGen.Core;
++using GeoGen.Constructor;
++using GeoGen.Infrastructure;
++using GeoGen.TheoremFinder;
++using Ninject;
++using NUnit.Framework;
++using Newtonsoft.Json;
++namespace GeoGen.TheoremProver.Tests;
++[TestFixture]
++public class ConditionalSymmetryTest
++{
++    [Test]
++    public void Historical_settings_keep_symmetry_inference_enabled()
++    {
++        var settings=JsonConvert.DeserializeObject<TheoremProverSettings>("{\"AssumeThatSimplifiableTheoremsAreTrue\":false,\"FindTrivialTheoremsOnlyForLastObject\":false}");
++        Assert.That(settings.InferFromSymmetry,Is.True);
++    }
++    [TestCase(true)]
++    [TestCase(false)]
++    public void An_extra_premise_cannot_be_permuted_without_explicit_authorization(bool infer)
++    {
++        using var kernel=NinjectUtilities.CreateKernel().AddConstructor().AddTheoremFinder(new TheoremFindingSettings(new[]{TheoremType.EqualLineSegments},null,null));
++        kernel.AddTheoremProver(new TheoremProvingSettings(new InferenceRuleManagerData(Array.Empty<InferenceRule>()),
++            new ObjectIntroducerData(Array.Empty<ObjectIntroductionRule>()),new TheoremProverSettings(false,false,infer)));
++        var (configuration,names)=Parser.ParseConfiguration(new[]{"Triangle: A, B, C"});
++        var condition=Parser.ParseTheorem("EqualLineSegments: A, B, A, C",names,false);
++        var goal=Parser.ParseTheorem("EqualLineSegments: A, B, B, C",names,false);
++        var (pictures,_)=kernel.Get<IGeometryConstructor>().ConstructWithUniformLayout(configuration,3);
++        var proved=kernel.Get<ITheoremProver>().ProveTheoremsAndConstructProofs(new TheoremMap(new[]{condition}),new TheoremMap(new[]{goal}),new ContextualPicture(pictures));
++        Assert.That(proved.ContainsKey(goal),Is.EqualTo(infer));
++    }
++}

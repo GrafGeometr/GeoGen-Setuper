@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "seconds": 60,
+  "types": ["EqualLineSegments"],
+  "conditions": ["EqualLineSegments: A, B, A, C"],
+  "samples": 8,
+  "starts": 80
+}

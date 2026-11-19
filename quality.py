@@ -19,7 +19,7 @@ def structure(event):
     layout,names,definitions = parse_configuration(event['configuration'])
     objects = {name:(op,args) for name,op,args in definitions}
     kind,goal = event['theorem'].split(':',1)
-    pending = list(re.findall(r'\w+',goal)); used=set(); base=set(); levels={n:0 for n in names}
+    pending = list(re.findall(r'\w+',goal+' '+(event.get('condition') or '').partition(':')[2])); used=set(); base=set(); levels={n:0 for n in names}
     for name,op,args in definitions:
         levels[name]=1+max((levels.get(a,0) for a in args),default=0)
     while pending:
@@ -43,10 +43,12 @@ def structure(event):
             'compactness':round(compactness,4)}
 
 
-def inspect_event(event, extending, directory, *, samples=8, milliseconds=2000, triangle_domain="generic"):
+def inspect_event(event, extending, directory, *, samples=8, milliseconds=2000, triangle_domain="generic", condition_report=None):
     """No unknown result is promoted to sampled-valid or to a mathematical proof."""
     directory=Path(directory);directory.mkdir(parents=True,exist_ok=True)
     features=structure(event)
+    if event.get('condition'):
+        return inspect_conditional(event,directory,features,milliseconds,condition_report)
     proof=check(event['configuration'],event['theorem'])
     report={'version':VERSION,'configurationKey':digest(event['configuration']),
             'theorem':event['theorem'],'features':features,'warnings':[],
@@ -135,7 +137,7 @@ def audit(job,extending,*,samples=8,milliseconds=2000,workers=2,limit=None,trian
     text=['# Проверка качества','',f'Проверено: {len(rows)}. Результаты: {dict(counts)}.',
           '', 'Успешные численные пробы не являются доказательством; оценка не измеряет красоту.','']
     for row in rows:
-        r=row['report'];text += [f"## {row['id']}: {r['verdict']}", '', '```text',row['event']['configuration'],row['event']['theorem'],'```',
+        r=row['report'];text += [f"## {row['id']}: {r['verdict']}", '', '```text',row['event']['configuration'],*(('Assume: '+row['event']['condition'],) if row['event'].get('condition') else ()),row['event']['theorem'],'```',
                                 '',description(r)+f". Метод: {r['standard'].get('method','—')}.",'']
         if r['truth']['status']=='counterexample':
             text += ['```json',json.dumps(r['truth'],ensure_ascii=False,indent=2),'```','']
@@ -150,6 +152,9 @@ def description(report):
         text='Контрпример: seed '+str(truth.get('sampleSeed','?'))
         if 'possible-acute-only-statement' in report['warnings']:
             text+='; возможно, требуется остроугольность'
+    elif report['verdict']=='conditioned-sampled-valid':
+        text=str(truth['samples'])+' условных проб; условие существенно'
+        text+=('; ослаблений проверено: '+str(truth['weakening']['completedVariants'])) if truth.get('weakening',{}).get('status')=='accepted' else '; ослабления не проверялись'
     elif truth['status']=='sampled-valid':
         text=str(truth['samples'])+' точных проб'
         if 'acute-triangle-required' in report['warnings']:text+='; только остроугольные треугольники'
@@ -158,3 +163,22 @@ def description(report):
     if features['unusedDefinitions']:text+='; не используются: '+', '.join(features['unusedDefinitions'])
     if 'diagram-not-drawable' in report['warnings']:text+='; Geometry не вычисляет картинку'
     return text
+
+
+def inspect_conditional(event,directory,features,milliseconds,condition_report=None):
+    from conditional import check_event
+    from standard_reasoning import check_conditional,verify_conditional_certificate
+    proof=check_conditional(event['configuration'],event['condition'],event['theorem'])
+    if proof['status']=='proved' and proof['cost']<=12 and verify_conditional_certificate(event['configuration'],event['condition'],event['theorem'],proof):
+        verdict='standard';truth={'status':'proved-by-certificate'}
+    else:
+        truth=condition_report if condition_report is not None else check_event(event,directory,milliseconds,weakening=False)
+        verdict='conditioned-sampled-valid' if truth['status']=='accepted' else 'review'
+    report={'version':VERSION,'configurationKey':digest([event['configuration'],event['condition']]),'condition':event['condition'],
+            'theorem':event['theorem'],'features':features,'warnings':[] if truth.get('weakening',{}).get('status')=='accepted' else ['conditional-weakening-not-checked'],
+            'standard':proof if proof['status']=='proved' else {'status':'unknown'},'truth':truth,'verdict':verdict,
+            'qualityScore':round(100*features['compactness']) if verdict=='conditioned-sampled-valid' else 0,
+            'notice':'Numerical evidence on independently sampled conditional diagrams; consult truth.weakening for relaxation coverage. Not a proof or a check of all components.'}
+    if features['unusedDefinitions']:report['warnings'].append('unused-definitions')
+    (directory/'quality.json').write_text(json.dumps(report,ensure_ascii=False,indent=2))
+    return report

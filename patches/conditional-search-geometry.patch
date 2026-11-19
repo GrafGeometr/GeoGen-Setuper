@@ -1,0 +1,155 @@
+diff --git a/GeoGenIntegration/src/nativeMain/kotlin/Main.kt b/GeoGenIntegration/src/nativeMain/kotlin/Main.kt
+--- a/GeoGenIntegration/src/nativeMain/kotlin/Main.kt
++++ b/GeoGenIntegration/src/nativeMain/kotlin/Main.kt
+@@ -4,6 +4,7 @@
+ 
+ data class GeoGenContext(
+     private val out: BufferedSink,
++    var witness: List<Double>? = null,
+     private val points: MutableMap<String, String> = mutableMapOf(),
+     private val lines: MutableMap<String, String> = mutableMapOf(),
+     val triangles: MutableMap<String, String> = mutableMapOf(),
+@@ -49,7 +50,17 @@
+         "Triangle" -> {
+             check(names.size == 3) { "Expected 3 points" }
+             triangles["triangle(${names.joinToString()})"] = "t"
+-            """
++            if (witness != null) {
++                val xy = witness!!
++                check(xy.size == 2 && xy.all { it.isFinite() } && xy[1] > 0) { "Invalid conditional witness" }
++                fun number(value: Double): String {
++                    val scaled = kotlin.math.round(kotlin.math.abs(value) * 1e12).toLong()
++                    return (if (value < 0) "-" else "") + (scaled / 1000000000000L).toString() + "." + (scaled % 1000000000000L).toString().padStart(12, '0')
++                }
++                val x = number(120 * xy[0] - 60)
++                val y = number(120 * xy[1] - 40)
++                "${names[0]} = #(-60-40i)\n${names[1]} = #(60-40i)\n${names[2]} = #($x${if (y.startsWith("-")) "" else "+"}${y}i)\n[orange] [fill] t = triangle(${names.joinToString()})"
++            } else """
+                 ${names[0]} = #(20+60i)
+                 ${names[1]} = #(60-40i)
+                 ${names[2]} = #(-60-40i)
+@@ -237,10 +248,12 @@
+     text()
+ }
+ 
+-fun GeoGenContext.parseGeoGenGoal(line: String) {
++fun GeoGenContext.parseGeoGenGoal(line: String, assumption: Boolean = false) {
+     val index = line.indexOf(":")
+     check(index != -1) { "Expected goal" }
+-    comment(line)
++    val color = if (assumption) "blue" else "red"
++    val intersectionName = if (assumption) "assumption_p" else "p"
++    comment(if (assumption) "Assume: $line" else line)
+     val args = buildList {
+         var l = line.substring(index + 1).trimStart()
+         while (true) {
+@@ -248,13 +261,13 @@
+                 '[' -> {
+                     val a = l.indexOf(",")
+                     val b = l.indexOf("]", a + 1)
+-                    line(l.substring(1, a), l.substring(a + 1, b).trimStart(), "[red]").also {
++                    line(l.substring(1, a), l.substring(a + 1, b).trimStart(), "[$color]").also {
+                         l = l.substring(b + 1)
+                     }
+                 }
+                 '(' -> {
+                     val a = l.indexOf(")")
+-                    circumcircle(l.substring(1, a), "[red]").also {
++                    circumcircle(l.substring(1, a), "[$color]").also {
+                         l = l.substring(a + 1)
+                     }
+                 }
+@@ -272,19 +285,19 @@
+     text(when (val name = line.substring(0, index).trim()) {
+         "ConcyclicPoints" -> {
+             check(args.size == 4) { "Expected 4 points" }
+-            "[red] [dash] circumcircle(${args[0]}, ${args[1]}, ${args[2]})"
++            "[$color] [dash] circumcircle(${args[0]}, ${args[1]}, ${args[2]})"
+         }
+         "CollinearPoints" -> {
+             check(args.size == 3) { "Expected 3 points" }
+-            "[red] [dash] line(${args[0]}, ${args[1]})"
++            "[$color] [dash] line(${args[0]}, ${args[1]})"
+         }
+         "ConcurrentLines" -> {
+             check(args.size == 3) { "Expected 3 lines" }
+-            "[red] intersect(${args[0]}, ${args[1]})"
++            "[$color] intersect(${args[0]}, ${args[1]})"
+         }
+         "LengthRatio2", "LengthRatio3", "SquaredLengthRatio2" -> {
+             check(args.size == 4) { "Expected 4 points" }
+-            "[red] segment(${args[0]}, ${args[1]})\n[red] segment(${args[2]}, ${args[3]})"
++            "[$color] segment(${args[0]}, ${args[1]})\n[$color] segment(${args[2]}, ${args[3]})"
+         }
+         "EqualAngles" -> {
+             check(args.size == 4) { "Expected four lines" }
+@@ -294,8 +307,8 @@
+         "EqualLineSegments" -> {
+             check(args.size == 4) { "Expected 4 points" }
+             """
+-                [red] [equal1] segment(${args[0]}, ${args[1]})
+-                [red] [equal1] segment(${args[2]}, ${args[3]})
++                [$color] [equal1] segment(${args[0]}, ${args[1]})
++                [$color] [equal1] segment(${args[2]}, ${args[3]})
+             """.trimIndent()
+         }
+         "LineTangentToCircle" -> {
+@@ -304,7 +317,7 @@
+         }
+         "TangentCircles" -> {
+             check(args.size == 2) { "Expected 2 circles" }
+-            "[red] ccintersect1(${args[0]}, ${args[1]})"
++            "[$color] ccintersect1(${args[0]}, ${args[1]})"
+         }
+         "Incidence" -> {
+             check(args.size == 2) { "Expected a point and a line or circle" }
+@@ -317,8 +330,8 @@
+         "PerpendicularLines" -> {
+             check(args.size == 2) { "Expected 2 lines" }
+             """
+-                [hide] p = intersect(${args[0]}, ${args[1]})
+-                [red] [fill] [dot] angle(intersect(${args[0]}, p+1, p+i), p, intersect(${args[1]}, p+1, p+i))
++                [hide] $intersectionName = intersect(${args[0]}, ${args[1]})
++                [$color] [fill] [dot] angle(cintersect1(${args[0]}, circle($intersectionName, $intersectionName+1)), $intersectionName, cintersect1(${args[1]}, circle($intersectionName, $intersectionName+1)))
+             """.trimIndent()
+         }
+         else -> error("Unexpected $name")
+@@ -326,15 +339,31 @@
+ }
+ 
+ fun parseGeoGen(text: BufferedSource, out: BufferedSink) = GeoGenContext(out).run {
+-    parseGeoGenInitial(text.readUtf8Line() ?: error("No line"))
+-
++    val initial = text.readUtf8Line() ?: error("No initial configuration")
++    val definitions = mutableListOf<String>()
+     while (true) {
+-        val line = text.readUtf8Line() ?: error("No line")
++        val line = text.readUtf8Line() ?: error("No configuration terminator")
+         if (line == "") break
+-        parseGeoGenLine(line)
+-    }
+-
+-    parseGeoGenGoal(text.readUtf8Line() ?: error("No line"))
++        definitions.add(line)
++    }
++    var goal = text.readUtf8Line() ?: error("No goal")
++    var premise: String? = null
++    if (goal.startsWith("Assume: ")) {
++        premise = goal.removePrefix("Assume: ")
++        val coordinates = text.readUtf8Line() ?: error("Missing witness")
++        check(coordinates.startsWith("Witness: ")) { "Conditional task requires a witness" }
++        witness = coordinates.removePrefix("Witness: ").split(',').map { it.trim().toDouble() }
++        goal = text.readUtf8Line() ?: error("Missing conditional goal")
++    }
++    parseGeoGenInitial(initial)
++    definitions.forEach(::parseGeoGenLine)
++    if (premise != null) {
++        comment("Witness: ${witness!!.joinToString()}")
++        // The parser accepts unranked premises by appending a harmless delimiter.
++        parseGeoGenGoal("$premise - assumption", true)
++        text()
++    }
++    parseGeoGenGoal(goal)
+     text.readUtf8Line()?.takeIf { it == "" } ?: error("Bad line")
+     text()
+     comment(text.readUtf8Line() ?: error("No line"))

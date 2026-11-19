@@ -186,7 +186,7 @@ class StreamingTests(unittest.TestCase):
             queue.export({'phase': 'finished'})
             rows = (self.job / 'results.tsv').read_text().splitlines()
             self.assertEqual(len(rows), 1)
-            self.assertEqual(len(rows[0].split('\t')), 10)
+            self.assertEqual(len(rows[0].split('\t')), 11)
             self.assertIn('error', rows[0])
         finally:
             queue.close()

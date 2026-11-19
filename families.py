@@ -184,23 +184,28 @@ def canonical_event(event, catalog):
             if value[0] == 'Circumcircle':
                 return ('circle', tuple(sorted(value[1][0], key=repr)))
             return value
-        kind, goal = event['theorem'].split(':', 1)
-        tokens = re.findall(r'\[[^\]]+\]|\([^\)]+\)|\w+', goal)
-        args = [obj(t) for t in tokens]
-        if kind.strip() in ('EqualLineSegments','LengthRatio2','LengthRatio3','SquaredLengthRatio2'):
-            if len(args) != 4:
-                raise ValueError('Неправильное равенство отрезков')
-            args = [tuple(sorted(args[:2], key=repr)), tuple(sorted(args[2:], key=repr))]
-        if kind.strip() == 'EqualAngles':
-            if len(args) != 4:
-                raise ValueError('Равенство углов требует четырёх прямых')
-            coefficients = {}
-            for arg, coefficient in zip(args, (-1,1,1,-1)):
-                coefficients[arg] = coefficients.get(arg,0)+coefficient
-            direct = tuple(sorted(((arg,c) for arg,c in coefficients.items() if c),key=repr))
-            reverse = tuple(sorted(((arg,-c) for arg,c in coefficients.items() if c),key=repr))
-            args = min((direct,reverse),key=repr)
-        outputs.append(repr((layout, tuple(sorted(objects.values(), key=repr)), kind.strip(), tuple(sorted(args, key=repr)))))
+        def statement_key(statement):
+            kind, goal = statement.split(':', 1)
+            tokens = re.findall(r'\[[^\]]+\]|\([^\)]+\)|\w+', goal)
+            args = [obj(t) for t in tokens]
+            if kind.strip() in ('EqualLineSegments','LengthRatio2','LengthRatio3','SquaredLengthRatio2'):
+                if len(args) != 4:
+                    raise ValueError('Неправильное равенство отрезков')
+                args = [tuple(sorted(args[:2], key=repr)), tuple(sorted(args[2:], key=repr))]
+            if kind.strip() == 'EqualAngles':
+                if len(args) != 4:
+                    raise ValueError('Равенство углов требует четырёх прямых')
+                coefficients = {}
+                for arg, coefficient in zip(args, (-1,1,1,-1)):
+                    coefficients[arg] = coefficients.get(arg,0)+coefficient
+                direct = tuple(sorted(((arg,c) for arg,c in coefficients.items() if c),key=repr))
+                reverse = tuple(sorted(((arg,-c) for arg,c in coefficients.items() if c),key=repr))
+                args = min((direct,reverse),key=repr)
+            return kind.strip(),tuple(sorted(args,key=repr))
+        goal_key=statement_key(event['theorem'])
+        key=(layout,tuple(sorted(objects.values(),key=repr)),*goal_key)
+        if event.get('condition'):key+=('Assume',statement_key(event['condition']))
+        outputs.append(repr(key))
     return digest(min(outputs))
 
 

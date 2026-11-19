@@ -23,7 +23,8 @@ class DiscoveryTests(unittest.TestCase):
         (self.suite / 'data/default-settings.json').write_text(json.dumps(settings))
         script = '''import sys,json,pathlib,time
 settings=json.load(open(sys.argv[1]));folder=pathlib.Path(settings['ProblemGenerationRunnerSettings']['StreamingOutputFolder'])
-(folder/'item.json').write_text(json.dumps(dict(schemaVersion=1,id='item',configuration='Triangle: A, B, C\\nD = Midpoint(A, B)',theorem='EqualLineSegments: A, D, D, B',readable='fixture')))
+(folder/'item.tmp').write_text(json.dumps(dict(schemaVersion=1,id='item',configuration='Triangle: A, B, C\\nD = Midpoint(A, B)',theorem='EqualLineSegments: A, D, D, B',readable='fixture')))
+(folder/'item.tmp').rename(folder/'item.json')
 '''
         self.producer = self.suite / 'lib/geogen/GeoGen.MainLauncher.dll'; self.producer.write_text(script)
         self.calls = []
@@ -104,5 +105,18 @@ settings=json.load(open(sys.argv[1]));folder=pathlib.Path(settings['ProblemGener
         self.assertEqual(discovery.seconds('1.5m'), 90)
         for value in ('nan','inf','-1','0','2d','100000000h'):
             with self.subTest(value=value), self.assertRaises(ValueError): discovery.seconds(value)
+
+    def test_conditional_config_is_frozen_and_restored_for_campaign_resume(self):
+        import os
+        config=self.root/'condition-source.json';config.write_text('{"version":1,"seconds":20}')
+        output=self.root/'conditional-campaign'
+        with patch.dict(os.environ,{'GEOGEN_CONDITIONS_CONFIG':str(config)}),patch.object(runtime,'require_conditional_bundle'):
+            discovery.create(self.family,output,budget=3)
+            frozen=output/'family/conditions-config.json'
+            self.assertEqual(frozen.read_text(),config.read_text())
+            self.assertTrue(json.loads((output/'run-state.json').read_text())['conditionalSearch'])
+            config.unlink()
+            discovery.run(output)
+            self.assertEqual(Path(os.environ['GEOGEN_CONDITIONS_CONFIG']),frozen)
 
 if __name__ == '__main__': unittest.main()

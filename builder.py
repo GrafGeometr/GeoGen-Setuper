@@ -322,6 +322,10 @@ class Builder:
         self.apply_source_patch(self.work / 'GeometryExtending', HERE / 'patches/metric-theorems-extending.patch')
         self.apply_source_patch(self.work / 'Geometry', HERE / 'patches/metric-theorems-geometry.patch')
         coverage = check_construction_coverage(self.work)
+        self.apply_source_patch(self.work / 'GeoGen', HERE / 'patches/conditional-search-geogen.patch')
+        self.apply_source_patch(self.work / 'Geometry', HERE / 'patches/conditional-search-geometry.patch')
+        self.apply_source_patch(self.work / 'GeoGen', HERE / 'patches/conditional-extending-geogen.patch')
+        self.apply_source_patch(self.work / 'GeometryExtending', HERE / 'patches/conditional-extending-haskell.patch')
         check_metric_theorem_coverage(self.work)
         if self.stage.exists():
             shutil.rmtree(self.stage)
@@ -393,6 +397,11 @@ class Builder:
         target = self.stage / 'lib/extending/GeometryExtending'
         target.parent.mkdir(parents=True)
         shutil.copy2(executable, target)
+        native_catalog=self.stage/'data/conditional-weakening-catalog.json'
+        self.run([self.dotnet,self.stage/'lib/geogen/GeoGen.MainLauncher.dll','--export-weakening-catalog',native_catalog],name='conditional-native-catalog')
+        haskell_catalog=json.loads(self.run([target,'--weakening-catalog'],name='conditional-haskell-catalog',capture=True))
+        if json.loads(native_catalog.read_text())!=haskell_catalog:
+            raise BuildError('Каталоги ослаблений C# и Haskell не совпадают')
         # Preserve the solver's actual dependency versions for subsequent builds.
         self.run([self.cabal, 'freeze', f'--with-compiler={self.ghc}'], cwd=extending, name='extending-freeze')
         shutil.copy2(extending / 'cabal.project.freeze', self.stage / 'data/cabal.project.freeze')
@@ -430,7 +439,7 @@ class Builder:
                   '--output', self.stage / 'lib/java'], name='converter-jre')
         shutil.copy2(HERE / 'runtime.py', self.stage / 'runtime.py')
         shutil.copy2(HERE / 'streaming.py', self.stage / 'streaming.py')
-        for module in ('families.py', 'discovery.py', 'standard_reasoning.py', 'quality.py', 'experimental_relations.py', 'search_calibration.py'):
+        for module in ('families.py', 'discovery.py', 'standard_reasoning.py', 'quality.py', 'experimental_relations.py', 'search_calibration.py', 'conditional.py'):
             shutil.copy2(HERE / module, self.stage / module)
         generator_dll=self.stage/'lib/geogen/GeoGen.ConfigurationGenerator.dll'
         write(self.stage/'data/experimental-relations.json',json.dumps({'version':1,'sha256':hashlib.sha256(generator_dll.read_bytes()).hexdigest()}))
@@ -440,6 +449,12 @@ class Builder:
         metric_files += ['lib/extending/GeometryExtending']
         metric_files += [str(p.relative_to(self.stage)) for p in (self.stage/'lib/converter').glob('*.jar')]
         write(self.stage/'data/metric-theorems.json',json.dumps({'version':1,'sha256':{p:hashlib.sha256((self.stage/p).read_bytes()).hexdigest() for p in metric_files}}))
+        conditional_files=[str(p.relative_to(self.stage)) for p in (self.stage/'lib/geogen').glob('GeoGen.*.dll')]
+        conditional_files += [str(p.relative_to(self.stage)) for p in (self.stage/'lib/converter').glob('*.jar')]
+        write(self.stage/'data/conditional-search.json',json.dumps({'version':1,'sha256':{p:hashlib.sha256((self.stage/p).read_bytes()).hexdigest() for p in conditional_files}}))
+        extending_files=conditional_files+['lib/extending/GeometryExtending']
+        write(self.stage/'data/conditional-extending.json',json.dumps({'version':1,'sha256':{p:hashlib.sha256((self.stage/p).read_bytes()).hexdigest() for p in extending_files}}))
+        shutil.copytree(HERE / 'examples/conditions', self.stage / 'examples/conditions')
         shutil.copytree(HERE / 'examples/search', self.stage / 'examples/search')
         shutil.copytree(HERE / 'examples/families', self.stage / 'examples/families')
         write(self.stage / 'geometry-suite', '#!/bin/sh\nset -eu\nsuite_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)\nexec python3 "$suite_dir/runtime.py" "$@"\n', True)
@@ -448,7 +463,7 @@ class Builder:
             'platform': platform.platform(), 'sources': self.manifest,
             'dotnet_sdk': DOTNET_VERSION, 'ghc': GHC_VERSION,
             'gradle': GRADLE_VERSION, 'jdk': '17',
-            'patches': ['Indexed fixed length ratios and directed angle equalities with downstream validation',
+            'patches': ['Conditional construction weakening in native C# with Haskell entry points', 'Native terminal conditional search with independent constrained validation', 'Indexed fixed length ratios and directed angle equalities with downstream validation',
                         'Exact local rank intervals over all valid sibling constructions',
                         'Original DFS and early symmetry pruning with optional theorem-count ranges',
                         'Native C# search scored after construction and incremental theorem finding',
@@ -480,6 +495,9 @@ class Builder:
         shutil.copy2(HERE / 'THEOREM_EXPANSION.md', self.stage / 'THEOREM_EXPANSION.md')
         shutil.copy2(HERE / 'METRIC_THEOREMS.md', self.stage / 'METRIC_THEOREMS.md')
         shutil.copy2(HERE / 'METRIC_THEOREMS_REPORT.md', self.stage / 'METRIC_THEOREMS_REPORT.md')
+        shutil.copy2(HERE / 'CONDITIONAL_SEARCH.md', self.stage / 'CONDITIONAL_SEARCH.md')
+        shutil.copy2(HERE / 'CONDITIONAL_EXTENDING.md', self.stage / 'CONDITIONAL_EXTENDING.md')
+        shutil.copy2(HERE / 'CONDITIONAL_EXTENDING_REPORT.md', self.stage / 'CONDITIONAL_EXTENDING_REPORT.md')
         # A broken build must never replace the last working installation.
         self.run([sys.executable, self.stage / 'runtime.py', 'smoke', '--output', self.work / ('smoke-' + uuid.uuid4().hex[:8])], name='smoke')
         dest = self.args.output.resolve()

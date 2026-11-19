@@ -34,5 +34,8 @@ fun main() {
         check(!loadFindingCondition(root, row.copy(conditionFile = "private.txt")).contains("secret"))
         check(!loadFindingCondition(root, row.copy(conditionFile = "../private.txt")).contains("secret"))
     } finally { root.deleteRecursively() }
+    val conditional = parseFinding("conditional\tready\tCollinearPoints: A, D, E\tfile.geo\t\t42\tCollinearPoints\tconditioned-sampled-valid\t100\tconditions/c.txt\tEqualLineSegments: A, B, A, C")!!
+    check(conditional.condition == "EqualLineSegments: A, B, A, C")
+    check(qualityLabel(conditional.quality).contains("условием"))
     println("STREAM_MODEL_OK: legacy/new metadata, missing scores, topics, stable arrival order and explicit beauty sorting")
 }

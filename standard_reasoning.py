@@ -490,3 +490,51 @@ def verify_certificate(configuration, theorem, result):
         return fresh == result
     except (ValueError, KeyError, IndexError, TypeError, ZeroDivisionError):
         return False
+
+
+def check_conditional(configuration, condition, theorem):
+    """Use one explicit premise; preserve modular integer coefficients and exact metric certificates."""
+    try:
+        ctx = Context(configuration)
+        kind, text = condition.split(':', 1)
+        kind = kind.strip()
+        args = re.findall(r'\[[^\]]+\]|\([^\)]+\)|\w+', text)
+        source = 'assumption:' + condition
+        row, rhs = None, Q(0)
+        if kind == 'CollinearPoints' and len(args) == 3 and all(a in ctx.points for a in args):
+            for pair in itertools.combinations(args, 2): ctx.known_pairs.add(tuple(sorted(pair)))
+            row = add({ctx.line(args[0],args[1]):1},{ctx.line(args[0],args[2]):1},-1)
+        elif kind == 'ConcyclicPoints' and len(args) == 4 and len(set(args)) == 4 and all(a in ctx.points for a in args):
+            ctx.known_pairs.update(tuple(sorted(p)) for p in itertools.combinations(args,2))
+            ctx.noncollinear.update(frozenset(p) for p in itertools.combinations(args,3))
+            a,b,c,d=args; row={}
+            for line, coefficient in zip([ctx.line(a,c),ctx.line(a,b),ctx.line(d,c),ctx.line(d,b)],(1,-1,-1,1)):
+                row=add(row,{line:coefficient})
+        elif kind in ('ParallelLines','PerpendicularLines') and len(args)==2:
+            lines=[ctx.line_object(a) for a in args]
+            if all(lines): row=add({lines[0]:1},{lines[1]:1},-1);rhs=Q(0) if kind=='ParallelLines' else Q(1,2)
+            if kind=='PerpendicularLines':
+                pairs=[tuple(x.strip() for x in a[1:-1].split(',')) if a.startswith('[') else ctx.lines.get(a,()) for a in args]
+                if all(isinstance(p,tuple) and len(p)==2 for p in pairs):
+                    ctx.metric_relations.append((dot(ctx.vector(*pairs[0]),ctx.vector(*pairs[1])),source))
+        elif kind=='EqualLineSegments' and len(args)==4:
+            u,v=ctx.vector(args[0],args[1]),ctx.vector(args[2],args[3])
+            if u and v:ctx.metric_relations.append((add(dot(u,u),dot(v,v),-1),source))
+        elif kind=='EqualAngles' and len(args)==4:
+            lines=[ctx.line_object(a) for a in args]
+            if all(lines):
+                row={}
+                for line, coefficient in zip(lines,(-1,1,1,-1)):row=add(row,{line:coefficient})
+        else:return {'status':'unknown','method':None}
+        if row is not None and None not in row:ctx.relations.append((row,rhs,source))
+        ctx.system=ModularSystem(ctx.relations);ctx.metric_system=RationalSystem(ctx.metric_relations)
+        proof=ctx.prove(theorem)
+        if proof['status']!='proved':return {'status':'unknown','method':None}
+        return {'status':'proved','method':'conditional-'+proof['method'],'cost':proof['cost']+1,
+                'condition':condition,'proof':proof}
+    except (ValueError,KeyError,IndexError,TypeError,ZeroDivisionError):
+        return {'status':'unknown','method':None}
+
+
+def verify_conditional_certificate(configuration, condition, theorem, result):
+    return result.get('status')=='proved' and result==check_conditional(configuration,condition,theorem)

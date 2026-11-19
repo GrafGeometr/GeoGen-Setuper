@@ -352,3 +352,9 @@ Gradle/NuGet ещё не снабжены полным lockfile; Cabal freeze и
 Новый эксперимент оценивает дочернюю конфигурацию после построения и поиска
 теорем. Настройки формулы и целей по глубине задаются JSON. Запуск, откат
 и ограничения описаны в [THEOREM_SEARCH.md](THEOREM_SEARCH.md).
+
+## Дополнительные условия
+
+Режим `run --conditions-config conditions.json` перебирает по одной дополнительной посылке на последнем шаге и проверяет существенность условия. Подробности, границы численной проверки и команды: [CONDITIONAL_SEARCH.md](CONDITIONAL_SEARCH.md).
+
+Условные задачи также проверяются на обобщения: [CONDITIONAL_EXTENDING.md](CONDITIONAL_EXTENDING.md), [результаты испытаний](CONDITIONAL_EXTENDING_REPORT.md).

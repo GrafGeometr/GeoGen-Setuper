@@ -1,0 +1,126 @@
+diff --git a/GeometryExtending.cabal b/GeometryExtending.cabal
+--- a/GeometryExtending.cabal
++++ b/GeometryExtending.cabal
+@@ -66,7 +66,7 @@
+     -- other-extensions:
+ 
+     -- Other library packages from which modules are imported.
+-    build-depends:    base ^>=4.18.0.0, random, mtl, containers, parsec, directory, complex-generic, constructible, async, SafeSemaphore
++    build-depends:    base ^>=4.18.0.0, random, mtl, containers, parsec, directory, complex-generic, constructible, async, SafeSemaphore, process, filepath
+ 
+     -- Directories containing source files.
+     hs-source-dirs:   app
+diff --git a/app/Main.hs b/app/Main.hs
+--- a/app/Main.hs
++++ b/app/Main.hs
+@@ -1,22 +1,24 @@
+ module Main where
+ 
+ import Parser (parseTheorem)
+-import System.Environment (getArgs)
++import System.Environment (getArgs, getExecutablePath, lookupEnv)
+ import RandomGen (runRand, runRandSeed)
+ import Extending
+ import Types (Shape(..))
+ import qualified Functions as F
+ import qualified Data.Map as Map
+ import System.Directory (renameFile, listDirectory)
+-import Data.List (isPrefixOf, isSuffixOf)
++import Data.List (isPrefixOf, isSuffixOf, isInfixOf)
+ import Control.Monad (forM_, unless)
+ import Control.Exception (try, SomeException, evaluate, displayException, fromException, throwIO, AsyncException)
+ import Control.Concurrent.MSem
+ import Control.Concurrent.Async (forConcurrently_)
+ import System.Timeout (timeout)
+-import System.Exit (exitFailure)
++import System.Exit (exitFailure, ExitCode(..))
++import System.FilePath ((</>), takeDirectory)
++import System.Process (readProcessWithExitCode)
+ import Text.Read (readMaybe)
+-import Data.Char (ord)
++import Data.Char (ord, isSpace)
+ import Numeric (showHex)
+ 
+ 
+@@ -32,6 +34,7 @@
+ main = do
+     args <- getArgs
+     case args of
++        ["--weakening-catalog"] -> putStrLn $ "{" <> concatWithComma [jsonString name <> ":" <> show (length (build (repeat (error "Catalog evaluated geometry"))) - 1) | (name,build) <- Map.toList F.functions] <> "}"
+         ["--check-file", file, limit] -> case readMaybe limit of
+             Just ms | ms > 0 && ms <= 3600000 -> checkOne file ms
+             _ -> putStrLn "Expected timeout in milliseconds (1..3600000)" >> exitFailure
+@@ -59,12 +62,16 @@
+                 let arg = dir <> file
+                 s <- readFile arg
+                 
+-                res <- timeout (1 * 1000000) $ case parseTheorem file $ unlines . fmap tail . filter ("!" `isPrefixOf`) . lines $ s of
++                res <- if conditionalContents s then do
++                    response <- nativeConditional arg 1000
++                    putStrLn response
++                    if "\"status\":\"rejected\"" `isInfixOf` response then renameFile arg (dir <> "BAD_" <> file) else pure ()
++                    pure (Just ())
++                  else timeout (1 * 1000000) $ case parseTheorem file $ unlines . fmap tail . filter ("!" `isPrefixOf`) . lines $ s of
+                     Left err -> print err
+                     Right (cs, cc) -> do
+                         res <- runRand $ check10 cs cc
+-                        unless res $ renameFile arg (dir <> "BAD_" <> file)
+-                
++                        unless res $ renameFile arg (dir <> "BAD_" <> file)                
+                 case res of
+                     Just _ -> return ()
+                     Nothing -> putStrLn $ "   !Timeout: " <> file) :: IO (Either SomeException ())
+@@ -80,6 +87,40 @@
+ -- inside the timeout; runRand alone can return a thunk whose work happens later.
+ checkOne :: FilePath -> Int -> IO ()
+ checkOne file milliseconds = do
++    contents <- readFile file
++    if conditionalContents contents then nativeConditional file milliseconds >>= putStrLn else checkOrdinary file milliseconds
++
++conditionalContents :: String -> Bool
++conditionalContents = any isCondition . lines
++  where
++    isCondition line = case dropWhile isSpace line of
++        '!':rest -> "Assume:" `isPrefixOf` dropWhile isSpace rest
++        _ -> False
++
++concatWithComma :: [String] -> String
++concatWithComma [] = ""
++concatWithComma (x:xs) = x <> concatMap (',' :) xs
++
++nativeConditional :: FilePath -> Int -> IO String
++nativeConditional file milliseconds = do
++    result <- try (timeout ((milliseconds + 5000) * 1000) $ do
++        executable <- getExecutablePath
++        customDotnet <- lookupEnv "GEOMETRY_CONDITIONAL_DOTNET"
++        customDll <- lookupEnv "GEOMETRY_CONDITIONAL_DLL"
++        let folder = takeDirectory executable
++            dotnet = maybe (folder </> ".." </> "dotnet" </> "dotnet") id customDotnet
++            dll = maybe (folder </> ".." </> "geogen" </> "GeoGen.MainLauncher.dll") id customDll
++        (code,output,errors) <- readProcessWithExitCode dotnet [dll,"--extend-conditional-geo",file,show milliseconds] ""
++        case code of
++            ExitSuccess -> pure output
++            _ -> ioError (userError ("Native conditional backend failed: " <> errors <> output))) :: IO (Either SomeException (Maybe String))
++    pure $ case result of
++        Left err -> "{\"status\":\"error\",\"message\":" <> jsonString (displayException err) <> "}"
++        Right Nothing -> "{\"status\":\"timeout\",\"message\":\"Conditional worker exceeded process deadline\"}"
++        Right (Just output) -> output
++
++checkOrdinary :: FilePath -> Int -> IO ()
++checkOrdinary file milliseconds = do
+     outcome <- try (timeout (milliseconds * 1000) $ do
+         contents <- readFile file
+         _ <- evaluate (length contents)
+@@ -105,6 +146,12 @@
+ 
+ validateOne :: FilePath -> Int -> Int -> Int -> String -> IO ()
+ validateOne file milliseconds count seed domain = do
++    contents <- readFile file
++    if conditionalContents contents then putStrLn "{\"status\":\"inconclusive\",\"message\":\"Conditional statements require --check-file or Geometry Suite conditional validation\"}"
++    else validateOrdinary file milliseconds count seed domain
++
++validateOrdinary :: FilePath -> Int -> Int -> Int -> String -> IO ()
++validateOrdinary file milliseconds count seed domain = do
+     outcome <- try (timeout (milliseconds * 1000) $ do
+         contents <- readFile file
+         _ <- evaluate (length contents)

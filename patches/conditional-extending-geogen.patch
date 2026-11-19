@@ -1,0 +1,624 @@
+diff --git a/Source/Launchers/GeoGen.MainLauncher/ConditionalExtendingCommand.cs b/Source/Launchers/GeoGen.MainLauncher/ConditionalExtendingCommand.cs
+new file mode 100644
+--- /dev/null
++++ b/Source/Launchers/GeoGen.MainLauncher/ConditionalExtendingCommand.cs
+@@ -0,0 +1,60 @@
++using System.Diagnostics;
++using System.Text.Json;
++using GeoGen.Core;
++using GeoGen.Constructor;
++using GeoGen.Infrastructure;
++using GeoGen.ProblemGenerator;
++using Ninject;
++namespace GeoGen.MainLauncher;
++internal static class ConditionalExtendingCommand
++{
++    public static void Run(string path,int? geoMilliseconds=null)
++    {
++        var clock=Stopwatch.StartNew();object result;ConditionalExtender extender=null;
++        try {
++            var input=geoMilliseconds.HasValue ? ReadGeo(path,geoMilliseconds.Value) : JsonDocument.Parse(File.ReadAllText(path));
++            using(input){var data=input.RootElement;
++                var configurationText=data.GetProperty("configuration").GetString();var conditionText=data.GetProperty("condition").GetString();var goalText=data.GetProperty("theorem").GetString();
++                var milliseconds=data.TryGetProperty("milliseconds",out var ms)?ms.GetInt32():15000;
++                if(milliseconds<1||milliseconds>3600000)throw new ArgumentException("Invalid conditional extending budget");
++                void Deadline(){if(clock.Elapsed.TotalMilliseconds>=milliseconds)throw new TimeoutException();}
++                var (configuration,names)=Parser.ParseConfiguration(configurationText.Split('\n'));
++                var condition=Parser.ParseTheorem(conditionText,names,false);var goal=Parser.ParseTheorem(goalText,names,false);
++                if(condition.Equals(goal)){Print(new{status="rejected",message="Conclusion repeats the condition"});return;}
++                using var kernel=NinjectUtilities.CreateKernel().AddConstructor();var constructor=kernel.Get<IGeometryConstructor>();
++                var settings=new ConditionalSearchSettings{Samples=8};var sampler=new ConditionalSampler(constructor,configuration,settings,Deadline);
++                var random=new Random(ConditionalSearchEngine.StableSeed("verify|"+configurationText+"|"+conditionText+"|"+goalText));
++                var roots=sampler.On(condition,random);
++                if(roots.Count<8){Print(new{status="inconclusive",message="Insufficient independent samples satisfying the condition",samples=roots.Count});return;}
++                var counter=roots.FirstOrDefault(r=>!ConditionalPredicate.Holds(r.Picture,goal));
++                if(counter!=null){Print(new{status="counterexample",message="Conclusion fails under the condition",coordinates=counter.Parameters,conditionResidual=ConditionalPredicate.Residual(counter.Picture,condition),goalResidual=ConditionalPredicate.Residual(counter.Picture,goal)});return;}
++                var generic=sampler.Generic(random,12);var counters=ConditionalSearchEngine.Counters(generic,condition,goal);
++                if(counters.Length<2){Print(new{status="inconclusive",message="Essentiality of the extra condition is not confirmed"});return;}
++                extender=new ConditionalExtender(constructor);
++                var perVariant=data.TryGetProperty("variantMilliseconds",out var per)?per.GetInt32():Math.Max(250,Math.Min(2000,milliseconds/Math.Max(1,configuration.ConstructedObjects.Sum(o=>ConditionalWeakeningCatalog.For(o).Length))));
++                if(perVariant<1||perVariant>3600000)throw new ArgumentException("Invalid per-variant budget");
++                var extension=extender.Check(configuration,condition,goal,roots,generic,o=>names.First(n=>n.Value.Equals(o)).Key,Deadline,perVariant);
++                result=new{status=extension.Status,message=extension.Status switch {"rejected"=>"Conclusion survives a weaker definition with the same condition","inconclusive"=>"Some weakenings remain undecided; no acceptance is claimed","counterexample"=>"Original conclusion fails on a newly found conditional sample",_=>"All catalog weakenings refuted under the same condition"},
++                    truth="conditioned-sampled-valid",samples=roots.Count,genericCounterexamples=counters.Length,counterexamples=counters,conditionSamples=roots.Select(r=>r.Parameters).ToArray(),
++                    weakening=extension,seconds=clock.Elapsed.TotalSeconds,notice="Finite numerical conditional weakening checks, not a formal proof or exhaustive component analysis"};
++            }
++        } catch(TimeoutException){result=new{status="timeout",message="Conditional Extending exceeded the shared deadline",weakening=extender?.Result("timeout")};}
++        catch(Exception error){result=new{status="error",message=error.Message,weakening=extender?.Result("error")};}
++        Print(result);
++    }
++    private static void Print(object value)=>Console.WriteLine(JsonSerializer.Serialize(value,new JsonSerializerOptions(ConditionalSearchSettings.JsonOptions){PropertyNamingPolicy=JsonNamingPolicy.CamelCase}));
++    private static JsonDocument ReadGeo(string path,int milliseconds)
++    {
++        var config=new List<string>();string condition=null,goal=null;
++        foreach(var raw in File.ReadLines(path)){
++            var comment=raw.TrimStart();if(!comment.StartsWith('!'))continue;var line=comment[1..].Trim();
++            if(line.StartsWith("Assume:")){
++                if(condition!=null)throw new ArgumentException("Exactly one condition is supported");
++                condition=line[7..].Trim();if(condition.EndsWith(" - assumption"))condition=condition[..^13];
++            }else if(line.StartsWith("Triangle:") || System.Text.RegularExpressions.Regex.IsMatch(line,@"^\w+\s*=\s*\w+\("))config.Add(line.Replace("{","").Replace("}",""));
++            else if(Enum.TryParse<TheoremType>(line.Split(':')[0],out _))goal=line.Split(" - total ranking")[0];
++        }
++        if(condition==null||goal==null||config.Count==0)throw new ArgumentException("Incomplete conditional .geo statement");
++        return JsonDocument.Parse(JsonSerializer.Serialize(new{configuration=string.Join('\n',config),condition,theorem=goal,milliseconds}));
++    }
++}
+diff --git a/Source/Launchers/GeoGen.MainLauncher/Program.cs b/Source/Launchers/GeoGen.MainLauncher/Program.cs
+--- a/Source/Launchers/GeoGen.MainLauncher/Program.cs
++++ b/Source/Launchers/GeoGen.MainLauncher/Program.cs
+@@ -34,6 +34,15 @@
+             }
+             if(customConfigurationFilePaths.Length==2 && customConfigurationFilePaths[0]=="--verify-conditional"){
+                 ConditionalCheckCommand.Run(customConfigurationFilePaths[1]);return;
++            }
++            if(customConfigurationFilePaths.Length==2 && customConfigurationFilePaths[0]=="--extend-conditional"){
++                ConditionalExtendingCommand.Run(customConfigurationFilePaths[1]);return;
++            }
++            if(customConfigurationFilePaths.Length==3 && customConfigurationFilePaths[0]=="--extend-conditional-geo"){
++                ConditionalExtendingCommand.Run(customConfigurationFilePaths[1],int.Parse(customConfigurationFilePaths[2]));return;
++            }
++            if(customConfigurationFilePaths.Length==2 && customConfigurationFilePaths[0]=="--export-weakening-catalog"){
++                File.WriteAllText(customConfigurationFilePaths[1],System.Text.Json.JsonSerializer.Serialize(GeoGen.ProblemGenerator.ConditionalWeakeningCatalog.Counts()));return;
+             }
+             await Application.Run(customConfigurationFilePaths, async (kernel, settings) =>
+         {
+diff --git a/Source/Library/GeoGen.Constructor/Pictures/Picture.cs b/Source/Library/GeoGen.Constructor/Pictures/Picture.cs
+--- a/Source/Library/GeoGen.Constructor/Pictures/Picture.cs
++++ b/Source/Library/GeoGen.Constructor/Pictures/Picture.cs
+@@ -225,7 +225,7 @@
+         /// <param name="configurationObject">The configuration object.</param>
+         /// <param name="analyticObject">The analytic object.</param>
+         /// <param name="equalObject">Either the equal configuration object already present in the picture; or null, if there's none.</param>
+-        internal void TryAdd(ConfigurationObject configurationObject, IAnalyticObject analyticObject, out ConfigurationObject equalObject)
++        public void TryAdd(ConfigurationObject configurationObject, IAnalyticObject analyticObject, out ConfigurationObject equalObject)
+         {
+             // Check if the types of objects correspond. This could save us some time while finding weird errors
+             if (_correctTypes[analyticObject.GetType()] != configurationObject.ObjectType)
+diff --git a/Source/Library/GeoGen.ProblemGenerator/ConditionalExtender.cs b/Source/Library/GeoGen.ProblemGenerator/ConditionalExtender.cs
+new file mode 100644
+--- /dev/null
++++ b/Source/Library/GeoGen.ProblemGenerator/ConditionalExtender.cs
+@@ -0,0 +1,107 @@
++using System.Diagnostics;
++using GeoGen.Constructor;
++using GeoGen.Core;
++namespace GeoGen.ProblemGenerator;
++
++public sealed class ConditionalWeakeningEvidence
++{
++    public string Object { get; init; }
++    public string Construction { get; init; }
++    public string[] Arguments { get; init; }
++    public int Variant { get; init; }
++    public string Description { get; init; }
++    public int Dimension { get; init; }
++    public string Status { get; set; }
++    public int Samples { get; set; }
++    public int ChangedDefinitionSamples { get; set; }
++    public int IndependentBatches { get; set; }
++    public double[][] Coordinates { get; set; }
++    public double? ConditionResidual { get; set; }
++    public double? GoalResidual { get; set; }
++    public long Draws { get; set; }
++    public string Message { get; set; }
++}
++public sealed record ConditionalExtensionResult(string Status,int TotalVariants,int CompletedVariants,int DefinitionsWithoutAlternatives,long Draws,IReadOnlyList<ConditionalWeakeningEvidence> Variants);
++internal sealed class VariantDeadlineException:Exception { }
++
++/// <summary>One relaxed definition at a time, with the SAME extra premise. Never accepts an unsampled weakening.</summary>
++public sealed class ConditionalExtender
++{
++    private readonly IGeometryConstructor _constructor;
++    public List<ConditionalWeakeningEvidence> Evidence { get; }=new();
++    public int TotalVariants { get; private set; }
++    public int DefinitionsWithoutAlternatives { get; private set; }
++    private long _originalDraws;
++    public ConditionalExtender(IGeometryConstructor constructor)=>_constructor=constructor;
++    public ConditionalExtensionResult Check(Configuration configuration,Theorem condition,Theorem goal,IReadOnlyList<ConditionSample> original,
++        IReadOnlyList<ConditionSample> generic,Func<ConfigurationObject,string> name,Action checkDeadline,int variantMilliseconds=1000)
++    {
++        var plans=configuration.ConstructedObjects.Select(o=>(obj:o,variants:ConditionalWeakeningCatalog.For(o))).ToArray();
++        TotalVariants=plans.Sum(p=>p.variants.Length);DefinitionsWithoutAlternatives=plans.Count(p=>p.variants.Length==0);
++        var originalSampler=new ConditionalSampler(_constructor,configuration,new ConditionalSearchSettings(),checkDeadline);
++        foreach(var (obj,variants) in plans)for(var index=0;index<variants.Length;index++){
++            checkDeadline();var variant=variants[index];
++            var evidence=new ConditionalWeakeningEvidence{Object=name(obj),Construction=obj.Construction.Name,Arguments=obj.PassedArguments.FlattenedList.Select(name).ToArray(),
++                Variant=index,Description=variant.Description,Dimension=2+variant.Parameters.Length,Status="inconclusive"};Evidence.Add(evidence);
++            // A purported weakening must actually contain the original definition, on both constrained and generic inputs.
++            var undefined=false;
++            foreach(var sample in original.Concat(generic)){
++                checkDeadline();var admits=AdmitsOriginal(variant,sample.Picture,sample.Picture.Get(obj));
++                if(admits==null){evidence.Message="Weakening locus is undefined on an original sample";undefined=true;break;}
++                if(admits==false)throw new InvalidOperationException($"Weakening catalog does not contain original {name(obj)}={obj.Construction.Name}, variant {index}: {variant.Description}");
++            }
++            if(undefined)continue;
++            var local=Stopwatch.StartNew();
++            void Deadline(){checkDeadline();if(local.ElapsedMilliseconds>=variantMilliseconds)throw new VariantDeadlineException();}
++            var settings=new ConditionalSearchSettings{Samples=8,Starts=80,Iterations=60};
++            var sampler=new ConditionalSampler(_constructor,configuration,settings,Deadline,obj,variant);
++            var samples=new List<double[]>();var disproved=false;var unknown=false;
++            try {
++                for(var batch=0;batch<2;batch++){
++                    var seed=ConditionalSearchEngine.StableSeed("extend|"+new OutputFormatter(configuration.AllObjects).FormatConfiguration(configuration)+"|"+name(obj)+"|"+index+"|"+batch+"|"+new OutputFormatter(configuration.AllObjects).FormatTheorem(condition));
++                    var valid=0;
++                    foreach(var sample in sampler.EnumerateOn(condition,new Random(seed))){
++                        var residual=ConditionalPredicate.Residual(sample.Picture,goal);
++                        if(!residual.HasValue)continue;
++                        evidence.Samples++;valid++;
++                        if(Math.Abs(residual.Value)>1e-5){
++                            var originalAtShape=originalSampler.Draw(sample.Parameters[0],sample.Parameters[1]);_originalDraws=originalSampler.Draws;
++                            if(originalAtShape!=null && ConditionalPredicate.Holds(originalAtShape.Picture,condition) &&
++                                ConditionalPredicate.Residual(originalAtShape.Picture,goal) is double originalResidual && Math.Abs(originalResidual)>1e-5){
++                                evidence.Status="original-counterexample";evidence.Coordinates=new[]{originalAtShape.Parameters};evidence.GoalResidual=originalResidual;
++                                evidence.ConditionResidual=ConditionalPredicate.Residual(originalAtShape.Picture,condition);evidence.Draws=sampler.Draws;
++                                return Result("counterexample");
++                            }
++                            evidence.Status="counterexample";evidence.Coordinates=new[]{sample.Parameters};
++                            evidence.ConditionResidual=ConditionalPredicate.Residual(sample.Picture,condition);evidence.GoalResidual=residual;
++                            disproved=true;break;
++                        }
++                        if(Math.Abs(residual.Value)>2e-8)unknown=true;
++                        GeoGen.AnalyticGeometry.IAnalyticObject expected;
++                        try{expected=_constructor.Construct(sample.Picture,obj,false);}
++                        catch(GeoGen.AnalyticGeometry.AnalyticException){expected=null;}
++                        if(expected==null || ConditionalWeakening.Difference(expected,sample.Picture.Get(obj))>1e-5)evidence.ChangedDefinitionSamples++;
++                        samples.Add(sample.Parameters);
++                    }
++                    if(disproved)break;
++                    if(valid<settings.Samples){unknown=true;break;}
++                    evidence.IndependentBatches++;
++                }
++                if(!disproved&&!unknown&&evidence.IndependentBatches==2&&evidence.ChangedDefinitionSamples>=2){
++                    evidence.Status="generalized";evidence.Coordinates=samples.ToArray();evidence.Draws=sampler.Draws;
++                    return Result("rejected");
++                }
++                if(!disproved)evidence.Message="Insufficient defined regular samples or ambiguous residuals; weakening has not been decided";
++            } catch(VariantDeadlineException){evidence.Message="Per-variant sampling budget exhausted";}
++            finally{evidence.Draws=sampler.Draws;}
++        }
++        return Result(Evidence.Any(e=>e.Status=="inconclusive") ? "inconclusive" : "accepted");
++    }
++    /// <summary>Null denotes an undefined geometric locus; false denotes a catalog mismatch.</summary>
++    public static bool? AdmitsOriginal(ConditionalWeakening variant,Picture picture,GeoGen.AnalyticGeometry.IAnalyticObject original)
++    {
++        try{return variant.Contains(picture,original);}
++        catch(Exception error) when(error is GeoGen.AnalyticGeometry.AnalyticException or ArithmeticException){return null;}
++    }
++    public ConditionalExtensionResult Result(string status)=>new(status,TotalVariants,Evidence.Count(e=>e.Status is "counterexample" or "generalized"),DefinitionsWithoutAlternatives,Evidence.Sum(e=>e.Draws)+_originalDraws,Evidence);
++}
+diff --git a/Source/Library/GeoGen.ProblemGenerator/ConditionalSampler.cs b/Source/Library/GeoGen.ProblemGenerator/ConditionalSampler.cs
+--- a/Source/Library/GeoGen.ProblemGenerator/ConditionalSampler.cs
++++ b/Source/Library/GeoGen.ProblemGenerator/ConditionalSampler.cs
+@@ -5,80 +5,118 @@
+ 
+ public sealed record ConditionSample(double[] Parameters,Picture Picture);
+ 
+-/// <summary>Black-box minimum-norm Newton projection for one scalar constraint in triangle shape space.</summary>
++/// <summary>Minimum-norm Newton projection in triangle shape coordinates plus explicit weakening coordinates.</summary>
+ public sealed class ConditionalSampler
+ {
+     private readonly IGeometryConstructor _constructor;
+     private readonly Configuration _configuration;
+     private readonly ConditionalSearchSettings _settings;
+     private readonly Action _checkBudget;
++    private readonly ConstructedConfigurationObject _changed;
++    private readonly ConditionalWeakening _weakening;
++    public int Dimension=>2+(_weakening?.Parameters.Length??0);
+     public long Draws { get; private set; }
+     public long Iterations { get; private set; }
+-    public ConditionalSampler(IGeometryConstructor constructor,Configuration configuration,ConditionalSearchSettings settings,Action checkBudget=null)
++    public ConditionalSampler(IGeometryConstructor constructor,Configuration configuration,ConditionalSearchSettings settings,Action checkBudget=null,
++        ConstructedConfigurationObject changed=null,ConditionalWeakening weakening=null)
+     {
+         if(configuration.LooseObjectsHolder.Layout!=LooseObjectLayout.Triangle || configuration.LooseObjects.Count!=3)
+             throw new ArgumentException("Conditional sampling currently supports Triangle only");
+-        _constructor=constructor;_configuration=configuration;_settings=settings;_checkBudget=checkBudget;
++        if((changed==null)!=(weakening==null) || changed!=null&&!configuration.ConstructedObjects.Contains(changed))throw new ArgumentException("Invalid weakening target");
++        _constructor=constructor;_configuration=configuration;_settings=settings;_checkBudget=checkBudget;_changed=changed;_weakening=weakening;
+     }
+-    public ConditionSample Draw(double x,double y)
++    public ConditionSample Draw(double x,double y)=>Draw(new[]{x,y});
++    public ConditionSample Draw(double[] parameters)
+     {
+         _checkBudget?.Invoke();Draws++;
+-        if(!double.IsFinite(x+y) || x< -2 || x>3 || y<.06 || y>3)return null;
++        if(parameters.Length!=Dimension||parameters.Any(v=>!double.IsFinite(v)))return null;
++        var x=parameters[0];var y=parameters[1];
++        if(x< -2 || x>3 || y<.06 || y>3)return null;
++        for(var i=2;i<Dimension;i++){
++            var v=parameters[i];var type=_weakening.Parameters[i-2];
++            if(type==WeakParameter.Angle ? Math.Abs(v)>Math.PI+1e-4 : type==WeakParameter.Radius ? v<1e-5||v>1000 : Math.Abs(v)>100)return null;
++        }
+         try {
+-            var (pictures,data)=_constructor.Construct(_configuration,1,()=>new IAnalyticObject[]{new Point(0,0),new Point(1,0),new Point(x,y)});
+-            if(pictures==null || data.InconstructibleObject!=null || data.Duplicates!=default)return null;
+-            var picture=pictures.First();var points=new List<Point>();
++            Picture picture;
++            if(_weakening==null){
++                var (pictures,data)=_constructor.Construct(_configuration,1,()=>new IAnalyticObject[]{new Point(0,0),new Point(1,0),new Point(x,y)});
++                if(pictures==null || data.InconstructibleObject!=null || data.Duplicates!=default)return null;
++                picture=pictures.First();
++            } else {
++                picture=new Picture();var root=new[]{new Point(0,0),new Point(1,0),new Point(x,y)};
++                for(var i=0;i<3;i++)picture.TryAdd(_configuration.LooseObjects[i],root[i],out _);
++                foreach(var obj in _configuration.ConstructedObjects){
++                    IAnalyticObject value;
++                    if(obj.Equals(_changed)){
++                        value=_weakening.Draw(picture,parameters[2..]);if(value==null)return null;
++                        picture.TryAdd(obj,value,out var duplicate);if(duplicate!=null)return null;
++                    } else {
++                        value=_constructor.Construct(picture,obj,true);if(value==null)return null;
++                    }
++                }
++            }
++            var points=new List<Point>();
+             foreach(var obj in _configuration.AllObjects){
+                 var value=picture.Get(obj);
+                 if(value is Point p){
+                     if(!double.IsFinite(p.X+p.Y) || Math.Abs(p.X)>100 || Math.Abs(p.Y)>100)return null;
+                     if(points.Any(q=>MetricRelations.SquaredDistance(p,q)<1e-10))return null;points.Add(p);
+                 }
+-                if(value is Circle c && (!double.IsFinite(c.Radius) || c.Radius<1e-6 || c.Radius>1000))return null;
++                if(value is Circle c && (!double.IsFinite(c.Radius+c.Center.X+c.Center.Y) || c.Radius<1e-6 || c.Radius>1000))return null;
++                if(value is Line l && !double.IsFinite(l.A+l.B+l.C))return null;
+             }
+-            return new ConditionSample(new[]{x,y},picture);
++            return new ConditionSample(parameters.ToArray(),picture);
+         }
+         catch(Exception e) when(e is AnalyticException or ConstructorException or GeoGenException or ArgumentException or InvalidOperationException or ArithmeticException){return null;}
++    }
++    private double[] Start(Random random)
++    {
++        var p=new double[Dimension];p[0]=-.6+2.2*random.NextDouble();p[1]=.2+1.7*random.NextDouble();
++        for(var i=2;i<Dimension;i++)p[i]=_weakening.Parameters[i-2] switch {
++            WeakParameter.Angle=>-Math.PI+2*Math.PI*random.NextDouble(),WeakParameter.Radius=>.1+3*random.NextDouble(),_=>-3+6*random.NextDouble()};
++        return p;
+     }
+     public List<ConditionSample> Generic(Random random,int count)
+     {
+         var result=new List<ConditionSample>();
+-        for(var i=0;i<count*30 && result.Count<count;i++){
+-            var sample=Draw(-.6+2.2*random.NextDouble(),.2+1.7*random.NextDouble());if(sample!=null)result.Add(sample);
+-        }
++        for(var i=0;i<count*30 && result.Count<count;i++){var sample=Draw(Start(random));if(sample!=null)result.Add(sample);}
+         return result;
+     }
+-    private (ConditionSample sample,double residual)? At(Theorem condition,double x,double y)
++    private (ConditionSample sample,double residual)? At(Theorem condition,double[] coordinates)
+     {
+-        var sample=Draw(x,y);if(sample==null)return null;
++        var sample=Draw(coordinates);if(sample==null)return null;
+         var residual=ConditionalPredicate.Residual(sample.Picture,condition);return residual.HasValue ? (sample,residual.Value) : null;
+     }
+-    public List<ConditionSample> On(Theorem condition,Random random)
++    public List<ConditionSample> On(Theorem condition,Random random)=>EnumerateOn(condition,random).ToList();
++    public IEnumerable<ConditionSample> EnumerateOn(Theorem condition,Random random)
+     {
+         var roots=new List<ConditionSample>();
+         for(var start=0;start<_settings.Starts && roots.Count<_settings.Samples;start++){
+-            var current=At(condition,-.6+2.2*random.NextDouble(),.2+1.7*random.NextDouble());
++            var current=At(condition,Start(random));
+             for(var iteration=0;current.HasValue && iteration<_settings.Iterations;iteration++){
+-                _checkBudget?.Invoke();Iterations++;
+-                var (sample,f)=current.Value;var x=sample.Parameters[0];var y=sample.Parameters[1];const double h=1e-5;
+-                var xp=At(condition,x+h,y);var xm=At(condition,x-h,y);var yp=At(condition,x,y+h);var ym=At(condition,x,y-h);
+-                if(!xp.HasValue||!xm.HasValue||!yp.HasValue||!ym.HasValue)break;
+-                var gx=(xp.Value.residual-xm.Value.residual)/(2*h);var gy=(yp.Value.residual-ym.Value.residual)/(2*h);var norm=gx*gx+gy*gy;
+-                if(!double.IsFinite(norm)||norm<1e-10)break;
++                _checkBudget?.Invoke();Iterations++;var (sample,f)=current.Value;var coordinates=sample.Parameters;const double h=1e-5;
++                var gradient=new double[Dimension];var valid=true;var norm=0.0;
++                for(var axis=0;axis<Dimension;axis++){
++                    var plus=coordinates.ToArray();var minus=coordinates.ToArray();plus[axis]+=h;minus[axis]-=h;
++                    var xp=At(condition,plus);var xm=At(condition,minus);if(!xp.HasValue||!xm.HasValue){valid=false;break;}
++                    gradient[axis]=(xp.Value.residual-xm.Value.residual)/(2*h);norm+=gradient[axis]*gradient[axis];
++                }
++                if(!valid||!double.IsFinite(norm)||norm<1e-10)break;
+                 if(Math.Abs(f)<1e-12){
+-                    if(roots.All(old=>Math.Pow(old.Parameters[0]-x,2)+Math.Pow(old.Parameters[1]-y,2)>=_settings.MinSampleDistance*_settings.MinSampleDistance))roots.Add(sample);
++                    if(roots.All(old=>old.Parameters.Zip(coordinates,(a,b)=>(a-b)*(a-b)).Sum()>=_settings.MinSampleDistance*_settings.MinSampleDistance)){
++                        roots.Add(sample);yield return sample;
++                    }
+                     break;
+                 }
+-                var dx=-f*gx/(norm+1e-12);var dy=-f*gy/(norm+1e-12);var length=Math.Sqrt(dx*dx+dy*dy);
+-                if(length>.4){dx*=.4/length;dy*=.4/length;}
++                var step=gradient.Select(g=>-f*g/(norm+1e-12)).ToArray();var length=Math.Sqrt(step.Sum(d=>d*d));
++                if(length>.4)for(var i=0;i<Dimension;i++)step[i]*=.4/length;
+                 (ConditionSample sample,double residual)? next=null;
+                 for(var scale=1.0;scale>=1.0/128;scale*=.5){
+-                    var trial=At(condition,x+scale*dx,y+scale*dy);
++                    var trial=At(condition,coordinates.Zip(step,(v,d)=>v+scale*d).ToArray());
+                     if(trial.HasValue && Math.Abs(trial.Value.residual)<Math.Abs(f)){next=trial;break;}
+                 }
+                 if(!next.HasValue)break;current=next;
+             }
+         }
+-        return roots;
+     }
+ }
+diff --git a/Source/Library/GeoGen.ProblemGenerator/ConditionalWeakening.cs b/Source/Library/GeoGen.ProblemGenerator/ConditionalWeakening.cs
+new file mode 100644
+--- /dev/null
++++ b/Source/Library/GeoGen.ProblemGenerator/ConditionalWeakening.cs
+@@ -0,0 +1,154 @@
++using GeoGen.AnalyticGeometry;
++using GeoGen.Constructor;
++using GeoGen.Core;
++namespace GeoGen.ProblemGenerator;
++
++public enum WeakParameter { Coordinate, Angle, Radius }
++
++/// <summary>A relaxed definition with explicit free coordinates; descendants retain their definitions.</summary>
++public sealed class ConditionalWeakening
++{
++    public string Description { get; }
++    public WeakParameter[] Parameters { get; }
++    public Func<Picture,double[],IAnalyticObject> Draw { get; }
++    public Func<Picture,IAnalyticObject,double[]> OriginalCoordinates { get; }
++    public ConditionalWeakening(string description,WeakParameter[] parameters,Func<Picture,double[],IAnalyticObject> draw,Func<Picture,IAnalyticObject,double[]> coordinates)
++        =>(Description,Parameters,Draw,OriginalCoordinates)=(description,parameters,draw,coordinates);
++    public static double Difference(IAnalyticObject a,IAnalyticObject b) => (a,b) switch {
++        (Point x,Point y)=>x.DistanceTo(y),
++        (Circle x,Circle y)=>Math.Max(x.Center.DistanceTo(y.Center),Math.Abs(x.Radius-y.Radius)),
++        (Line x,Line y)=>Math.Min(Math.Max(Math.Max(Math.Abs(x.A-y.A),Math.Abs(x.B-y.B)),Math.Abs(x.C-y.C)),
++                                Math.Max(Math.Max(Math.Abs(x.A+y.A),Math.Abs(x.B+y.B)),Math.Abs(x.C+y.C))),
++        _=>double.PositiveInfinity
++    };
++    public bool Contains(Picture p,IAnalyticObject original) => Difference(original,Draw(p,OriginalCoordinates(p,original)))<1e-6;
++}
++
++/// <summary>Native counterparts of every alternative in Extending Functions.functions (original is excluded).</summary>
++public static class ConditionalWeakeningCatalog
++{
++    private static readonly WeakParameter[] One={WeakParameter.Coordinate},Two={WeakParameter.Coordinate,WeakParameter.Coordinate},Angle={WeakParameter.Angle},Radius={WeakParameter.Radius};
++    private static Point Direction(Line l)=>new(-l.B,l.A);
++    private static Point OnLine(Line l,double t)=>new Point(-l.A*l.C,-l.B*l.C)+Direction(l)*t;
++    private static double Along(Line l,Point p)=>p.X*(-l.B)+p.Y*l.A;
++    private static Point Unit(Point p)=>p/p.DistanceToOrigin;
++    private static Func<Picture,Line> Line(Func<Picture,Point> a,Func<Picture,Point> b)=>p=>new Line(a(p),b(p));
++    private static Func<Picture,Point> Mid(Func<Picture,Point> a,Func<Picture,Point> b)=>p=>(a(p)+b(p))/2;
++    private static Func<Picture,Point> Center(Func<Picture,Circle> c)=>p=>c(p).Center;
++    private static Func<Picture,Line> Perp(Func<Picture,Point> a,Func<Picture,Line> l)=>p=>l(p).PerpendicularLineThroughPoint(a(p));
++    private static Func<Picture,Line> Parallel(Func<Picture,Point> a,Func<Picture,Line> l)=>p=>new Line(a(p),a(p)+Direction(l(p)));
++    private static Func<Picture,Line> Bisector(Func<Picture,Point> vertex,Func<Picture,Point> b,Func<Picture,Point> c,bool external=false)=>p=>{
++        var v=vertex(p);var u=Unit(b(p)-v);var w=Unit(c(p)-v);return new Line(v,v+u+(external ? -1 : 1)*w);
++    };
++    private static Func<Picture,Line> Symmedian(Func<Picture,Point> a,Func<Picture,Point> b,Func<Picture,Point> c)=>p=>{
++        var x=a(p);var y=b(p);var z=c(p);var ab=MetricRelations.SquaredDistance(x,y);var ac=MetricRelations.SquaredDistance(x,z);
++        return new Line(x,(y*ac+z*ab)/(ab+ac));
++    };
++    private static Func<Picture,Circle> Circum(Func<Picture,Point> a,Func<Picture,Point> b,Func<Picture,Point> c)=>p=>new Circle(a(p),b(p),c(p));
++    private static Func<Picture,Point> Incenter(Func<Picture,Point> a,Func<Picture,Point> b,Func<Picture,Point> c)=>p=>{
++        var x=a(p);var y=b(p);var z=c(p);var u=y.DistanceTo(z);var v=x.DistanceTo(z);var w=x.DistanceTo(y);return (x*u+y*v+z*w)/(u+v+w);
++    };
++    private static ConditionalWeakening PointOn(string name,Func<Picture,Line> line)=>new(name,One,
++        (p,t)=>OnLine(line(p),t[0]),(p,o)=>new[]{Along(line(p),(Point)o)});
++    private static ConditionalWeakening PointOn(string name,Func<Picture,Circle> circle)=>new(name,Angle,
++        (p,t)=>circle(p).Center+new Point(Math.Cos(t[0]),Math.Sin(t[0]))*circle(p).Radius,
++        (p,o)=>new[]{Math.Atan2(((Point)o).Y-circle(p).Center.Y,((Point)o).X-circle(p).Center.X)});
++    private static ConditionalWeakening FreePoint()=>new("arbitrary point",Two,(p,t)=>new Point(t[0],t[1]),(p,o)=>new[]{((Point)o).X,((Point)o).Y});
++    private static ConditionalWeakening Through(string name,Func<Picture,Point> point)=>new(name,Angle,
++        (p,t)=>new Line(point(p),point(p)+new Point(Math.Cos(t[0]),Math.Sin(t[0]))),
++        (p,o)=>new[]{Math.Atan2(((Line)o).A,-((Line)o).B)});
++    private static ConditionalWeakening ParallelTo(string name,Func<Picture,Line> line)=>new(name,One,
++        (p,t)=>{var l=line(p);var q=new Point(-l.A*(l.C+t[0]),-l.B*(l.C+t[0]));return new Line(q,q+Direction(l));},
++        (p,o)=>{var l=line(p);var v=(Line)o;return new[]{v.C*(v.A*l.A+v.B*l.B)-l.C};});
++    private static ConditionalWeakening Centered(string name,Func<Picture,Point> center)=>new(name,Radius,
++        (p,t)=>new Circle(center(p),t[0]),(p,o)=>new[]{((Circle)o).Radius});
++    private static ConditionalWeakening CircleThrough(string name,Func<Picture,Point> point)=>new(name,Two,
++        (p,t)=>{var c=new Point(t[0],t[1]);return new Circle(c,c.DistanceTo(point(p)));},
++        (p,o)=>new[]{((Circle)o).Center.X,((Circle)o).Center.Y});
++    private static ConditionalWeakening CircleOn(string name,Func<Picture,Line> centers,Func<Picture,Point> through)=>new(name,One,
++        (p,t)=>{var c=OnLine(centers(p),t[0]);return new Circle(c,c.DistanceTo(through(p)));},
++        (p,o)=>new[]{Along(centers(p),((Circle)o).Center)});
++    private static ConditionalWeakening TangentOn(string name,Func<Picture,Line> centers,Func<Picture,Line> tangent)=>new(name,One,
++        (p,t)=>{var c=OnLine(centers(p),t[0]);return new Circle(c,c.DistanceTo(c.Project(tangent(p))));},
++        (p,o)=>new[]{Along(centers(p),((Circle)o).Center)});
++
++    public static ConditionalWeakening[] For(ConstructedConfigurationObject obj)=>For(obj.Construction.Name,obj.PassedArguments.FlattenedList);
++    public static ConditionalWeakening[] For(string name,IReadOnlyList<ConfigurationObject> args)
++    {
++        Func<Picture,Point> P(int i)=>p=>(Point)p.Get(args[i]);
++        Func<Picture,Line> L(int i)=>p=>(Line)p.Get(args[i]);
++        Func<Picture,Circle> C(int i)=>p=>(Circle)p.Get(args[i]);
++        var a=P(0);var b=P(1);var c=P(2);var d=P(3);
++        var ab=Line(a,b);var bc=Line(b,c);var ac=Line(a,c);
++        var ma=Mid(b,c);var midAB=Mid(a,b);var midAC=Mid(a,c);
++        var cc=Circum(a,b,c);var o=Center(cc);Func<Picture,Point> h=p=>a(p)+b(p)+c(p)-2*o(p);
++        var inc=Incenter(a,b,c);var median=Line(a,ma);var altitude=Perp(a,bc);var midline=Line(midAB,midAC);
++        var internalA=Bisector(a,b,c);var externalA=Bisector(a,b,c,true);var sym=Symmedian(a,b,c);
++        var radiusLine=Line(a,o);
++        Func<Picture,Circle> nine=p=>new Circle(midAB(p),ma(p),midAC(p));
++        ConditionalWeakening[] Intersections(Func<Picture,Line> l,Func<Picture,Line> m)=>new[]{PointOn("point on first line",l),PointOn("point on second line",m)};
++        ConditionalWeakening[] Middle(Func<Picture,Line> l)=>new[]{PointOn("point on defining cevian",l),PointOn("point on midline",midline)};
++        ConditionalWeakening[] End(Func<Picture,Line> l)=>new[]{PointOn("point on defining cevian",l),PointOn("point on opposite side",bc)};
++        ConditionalWeakening[] TwoLine(Func<Picture,Line> l)=>new[]{Through("line through defining point",a),ParallelTo("line parallel to defining direction",l)};
++        return name switch {
++            "PerpendicularLine"=>TwoLine(Perp(a,L(1))),
++            "IncircleTangentPoint"=>new[]{PointOn("point on opposite side",bc),PointOn("point on incircle",p=>new Circle(inc(p),inc(p).DistanceTo(inc(p).Project(bc(p)))))},
++            "FeuerbachPoint"=>new[]{PointOn("point on incircle",p=>new Circle(inc(p),inc(p).DistanceTo(inc(p).Project(bc(p))))),PointOn("point on nine point circle",nine)},
++            "PonceletPoint"=>new[]{PointOn("point on ABC nine point circle",nine),PointOn("point on ABD nine point circle",p=>new Circle(midAB(p),Mid(b,d)(p),Mid(a,d)(p))),PointOn("point on ACD nine point circle",p=>new Circle(midAC(p),Mid(c,d)(p),Mid(a,d)(p))),PointOn("point on BCD nine point circle",p=>new Circle(ma(p),Mid(c,d)(p),Mid(b,d)(p)))},
++            "QuadrilateralCentroid"=>new[]{PointOn("point on first bimedian",Line(midAB,Mid(c,d))),PointOn("point on second bimedian",Line(midAC,Mid(b,d))),PointOn("point on third bimedian",Line(Mid(a,d),ma))},
++            "HOPoint"=>new[]{PointOn("point on opposite side",bc)},
++            "FPC"=>Fpc(h,ma,p=>a(p).Project(bc(p))),
++            "CenterOfCircle" or "Harmonic" or "Gergonne" or "Nagel" or "Antigonal" or "Isotomic" or "Isogonal"=>new[]{FreePoint()},
++            "InversionOfPoint"=>new[]{PointOn("point on inversion ray",Line(a,Center(C(1))))},
++            "CenterOfNegativeHomothety" or "CenterOfPositiveHomothety"=>new[]{PointOn("point on line of centers",Line(Center(C(0)),Center(C(1))))},
++            "Lemoine"=>new[]{PointOn("point on B symmedian",Symmedian(b,a,c)),PointOn("point on A symmedian",sym),PointOn("point on C symmedian",Symmedian(c,a,b))},
++            "TangentLinesIntersection"=>new[]{PointOn("point on opposite perpendicular bisector",Perp(ma,bc))},
++            "DumptyPoint"=>new[]{PointOn("point on A symmedian",sym),PointOn("point on OBC circle",Circum(o,b,c))},
++            "HumptyPoint"=>new[]{PointOn("point on A median",median),PointOn("point on HBC circle",Circum(h,b,c))},
++            "RadiusLineMiddle"=>Middle(radiusLine),"RadiusLineEnd"=>End(radiusLine),"RadiusLine"=>new[]{Through("line through vertex",a)},
++            "ExternalBisectorMiddle"=>Middle(externalA),"ExternalBisectorEnd"=>End(externalA),
++            "SymedianMiddle"=>Middle(sym),"SymedianEnd"=>End(sym),"Symedian"=>new[]{Through("line through vertex",a)},
++            "MedianMiddle"=>Middle(median),"HeightMiddle"=>Middle(altitude),"BisectorMiddle"=>Middle(internalA),"BisectorEnd"=>End(internalA),
++            "Centroid"=>new[]{PointOn("point on A median",median),PointOn("point on B median",Line(b,midAC)),PointOn("point on C median",Line(c,midAB))},
++            "CircleWithCenterThroughPoint"=>new[]{Centered("circle with given center",a),CircleThrough("circle through given point",b)},
++            "CircleWithDiameter"=>new[]{CircleOn("center on AB through A",ab,a),CircleOn("center on AB through B",ab,b),Centered("circle with midpoint center",midAB),CircleOn("center on perpendicular bisector through A",Perp(midAB,ab),a)},
++            "Circumcenter"=>new[]{PointOn("point on AB perpendicular bisector",Perp(midAB,ab)),PointOn("point on BC perpendicular bisector",Perp(ma,bc)),PointOn("point on AC perpendicular bisector",Perp(midAC,ac))},
++            "Circumcircle"=>new[]{Centered("circle with circumcenter",o),CircleOn("circle through AB",Perp(midAB,ab),a),CircleOn("circle through BC",Perp(ma,bc),b),CircleOn("circle through AC",Perp(midAC,ac),c)},
++            "Excenter"=>new[]{PointOn("point on A internal bisector",internalA),PointOn("point on C external bisector",Bisector(c,a,b,true)),PointOn("point on B external bisector",Bisector(b,a,c,true))},
++            "Excircle"=>new[]{TangentOn("center on A bisector tangent AC",internalA,ac),TangentOn("center on C external bisector tangent BC",Bisector(c,a,b,true),bc),TangentOn("center on B external bisector tangent AB",Bisector(b,a,c,true),ab)},
++            "ExternalAngleBisector" or "InternalAngleBisector"=>new[]{Through("line through vertex",a)},
++            "Incenter"=>new[]{PointOn("point on B bisector",Bisector(b,a,c)),PointOn("point on A bisector",internalA),PointOn("point on C bisector",Bisector(c,a,b)),FreePoint()},
++            "Incircle"=>new[]{TangentOn("center on B bisector tangent AB",Bisector(b,a,c),ab),TangentOn("center on A bisector tangent AB",internalA,ab),TangentOn("center on C bisector tangent AC",Bisector(c,a,b),ac)},
++            "IntersectionOfLineAndLineFromPoints"=>Intersections(L(0),Line(b,c)),"IntersectionOfLines"=>Intersections(L(0),L(1)),"IntersectionOfLinesFromPoints"=>Intersections(ab,Line(c,d)),
++            "IsoscelesTrapezoidPoint"=>new[]{PointOn("point on parallel to opposite side",Parallel(a,bc))},
++            "LineFromPoints"=>new[]{Through("line through A",a),Through("line through B",b)},
++            "LineThroughCircumcenter"=>new[]{Through("line through vertex",a),Through("line through circumcenter",o)},
++            "Median"=>new[]{Through("line through vertex",a),Through("line through opposite midpoint",ma)},
++            "Midline"=>new[]{Through("line through first midpoint",midAB),Through("line through second midpoint",midAC),ParallelTo("line parallel to opposite side",bc)},
++            "Midpoint"=>new[]{PointOn("point on defining line",ab)},
++            "MidpointOfArc"=>new[]{PointOn("point on external bisector",externalA),PointOn("point on circumcircle",cc)},
++            "MidpointOfOppositeArc"=>new[]{PointOn("point on internal bisector",internalA),PointOn("point on circumcircle",cc)},
++            "NinePointCircle" or "ReflectionInLine" or "TangentLine"=>Array.Empty<ConditionalWeakening>(),
++            "OppositePointOnCircumcircle"=>new[]{PointOn("point on circumcircle",cc)},
++            "Orthocenter"=>new[]{PointOn("point on A altitude",altitude),PointOn("point on B altitude",Perp(b,ac)),PointOn("point on C altitude",Perp(c,ab))},
++            "ParallelLine"=>TwoLine(L(1)),"ParallelLineToLineFromPoints"=>TwoLine(bc),
++            "ParallelogramPoint"=>new[]{PointOn("point on A median",median),PointOn("point on parallel through B",Parallel(b,ac)),PointOn("point on parallel through C",Parallel(c,ab))},
++            "PerpendicularBisector"=>new[]{Through("line through midpoint",midAB),ParallelTo("line perpendicular to AB",Perp(midAB,ab))},
++            "PerpendicularLineAtPointOfLine"=>new[]{ParallelTo("line perpendicular to AB",Perp(a,ab)),Through("line through vertex",a)},
++            "PerpendicularLineToLineFromPoints"=>new[]{ParallelTo("line perpendicular to BC",altitude),Through("line through vertex",a)},
++            "PerpendicularProjection"=>new[]{PointOn("point on target line",L(1)),PointOn("point on projecting perpendicular",Perp(a,L(1)))},
++            "PerpendicularProjectionOnLineFromPoints"=>new[]{PointOn("point on target line",bc),PointOn("point on projecting perpendicular",altitude)},
++            "PointReflection"=>new[]{PointOn("point on defining line",ab)},
++            "ReflectionInLineFromPoints"=>new[]{PointOn("point on reflecting perpendicular",altitude)},
++            "SecondIntersectionOfCircleAndLineFromPoints"=>new[]{PointOn("point on circle",Circum(a,c,d)),PointOn("point on line",ab)},
++            "SecondIntersectionOfTwoCircumcircles"=>new[]{PointOn("point on first circle",cc),PointOn("point on second circle",Circum(a,d,P(4)))},
++            _=>throw new NotSupportedException("No conditional weakening catalog for "+name)
++        };
++    }
++    private static ConditionalWeakening[] Fpc(Func<Picture,Point> h,Func<Picture,Point> m,Func<Picture,Point> d)=>new[]{
++        CircleOn("circle through H and M",Perp(Mid(h,m),Line(h,m)),h),
++        CircleOn("circle through M and D",Perp(Mid(m,d),Line(m,d)),m),
++        CircleOn("circle through D and H",Perp(Mid(d,h),Line(d,h)),d)};
++    public static Dictionary<string,int> Counts()=>Constructions.GetPredefinedConstructions().Cast<Construction>().Concat(Constructions.GetComposedConstructions())
++        .ToDictionary(c=>c.Name,c=>For(c.Name,Array.Empty<ConfigurationObject>()).Length);
++}
+diff --git a/Source/Tests/UnitTests/GeoGen.ConfigurationGenerator.Tests/ConditionalExtendingTest.cs b/Source/Tests/UnitTests/GeoGen.ConfigurationGenerator.Tests/ConditionalExtendingTest.cs
+new file mode 100644
+--- /dev/null
++++ b/Source/Tests/UnitTests/GeoGen.ConfigurationGenerator.Tests/ConditionalExtendingTest.cs
+@@ -0,0 +1,102 @@
++using GeoGen.Core;
++using GeoGen.Constructor;
++using GeoGen.Infrastructure;
++using GeoGen.AnalyticGeometry;
++using GeoGen.ProblemGenerator;
++using Ninject;
++using NUnit.Framework;
++namespace GeoGen.ConfigurationGenerator.Tests;
++
++[TestFixture]
++public class ConditionalWeakeningCatalogTest
++{
++    private IKernel _kernel;
++    [OneTimeSetUp]public void Setup()=>_kernel=NinjectUtilities.CreateKernel().AddConstructor();
++    [OneTimeTearDown]public void Cleanup()=>_kernel.Dispose();
++    public static IEnumerable<string> Names()=>Constructions.GetPredefinedConstructions().Cast<Construction>().Concat(Constructions.GetComposedConstructions()).Select(c=>c.Name);
++    [TestCaseSource(nameof(Names))]
++    public void Every_relaxation_contains_the_original_on_independent_generic_pictures(string name)
++    {
++        var construction=Constructions.GetPredefinedConstructions().Cast<Construction>().Concat(Constructions.GetComposedConstructions()).Single(c=>c.Name==name);
++        var args=construction.Signature.ObjectTypes.Select(t=>(ConfigurationObject)new LooseConfigurationObject(t)).ToArray();
++        var obj=new ConstructedConfigurationObject(construction,args);var variants=ConditionalWeakeningCatalog.For(obj);
++        var random=new Random(ConditionalSearchEngine.StableSeed(name));var successes=0;
++        Point Point()=>new(-2+4*random.NextDouble(),-2+4*random.NextDouble());
++        for(var attempt=0;attempt<30&&successes<3;attempt++){
++            var picture=new Picture();
++            foreach(var arg in args){IAnalyticObject value=arg.ObjectType switch {
++                ConfigurationObjectType.Point=>Point(),ConfigurationObjectType.Line=>new Line(Point(),Point()),ConfigurationObjectType.Circle=>new Circle(Point(),.3+2*random.NextDouble()),_=>throw new Exception()};
++                picture.TryAdd(arg,value,out _);
++            }
++            IAnalyticObject original;
++            try{original=_kernel.Get<IGeometryConstructor>().Construct(picture,obj,false);if(original==null)continue;}
++            catch(AnalyticException){continue;}
++            foreach(var variant in variants)Assert.That(variant.Contains(picture,original),Is.True,$"{name}: {variant.Description}; original={original}");
++            successes++;
++        }
++        Assert.That(successes,Is.EqualTo(3));
++    }
++}
++
++[TestFixture]
++public class ConditionalExtendingTest
++{
++    [TestCase(false)]
++    [TestCase(true)]
++    public void A_definition_is_redundant_only_when_its_weakening_preserves_the_conditional_goal(bool euler)
++    {
++        using var kernel=NinjectUtilities.CreateKernel().AddConstructor();var ctor=kernel.Get<IGeometryConstructor>();
++        var lines=euler ? new[]{"Triangle: A, B, C","O = Circumcenter(A, B, C)","H = Orthocenter(A, B, C)"} : new[]{"Triangle: A, B, C","D = Midpoint(A, B)"};
++        var (config,names)=Parser.ParseConfiguration(lines);
++        var condition=Parser.ParseTheorem(euler ? "EqualLineSegments: A, B, A, C" : "EqualLineSegments: A, D, C, D",names,false);
++        var goal=Parser.ParseTheorem(euler ? "CollinearPoints: A, O, H" : "LengthRatio2: A, B, C, D",names,false);
++        var sampler=new ConditionalSampler(ctor,config,new ConditionalSearchSettings());
++        var roots=sampler.On(condition,new Random(61));Assert.That(roots.Count,Is.EqualTo(8));
++        Assert.That(roots.All(s=>ConditionalPredicate.Holds(s.Picture,goal)),Is.True);
++        var generic=sampler.Generic(new Random(71),12);var extender=new ConditionalExtender(ctor);
++        var result=extender.Check(config,condition,goal,roots,generic,o=>names.Single(n=>n.Value.Equals(o)).Key,()=>{},5000);
++        Assert.That(result.Status,Is.EqualTo(euler ? "rejected" : "accepted"));
++        if(euler)Assert.That(result.Variants.Last().Samples,Is.EqualTo(16));
++        else Assert.That(result.Variants.Single().Coordinates.Single().Length,Is.EqualTo(3));
++    }
++    [Test]
++    public void Descendants_are_recomputed_after_replacing_a_definition()
++    {
++        using var kernel=NinjectUtilities.CreateKernel().AddConstructor();var ctor=kernel.Get<IGeometryConstructor>();
++        var (config,names)=Parser.ParseConfiguration(new[]{"Triangle: A, B, C","D = Midpoint(A, B)","E = Midpoint(D, C)"});
++        var changed=(ConstructedConfigurationObject)names["D"];var variant=ConditionalWeakeningCatalog.For(changed).Single();
++        var sampler=new ConditionalSampler(ctor,config,new ConditionalSearchSettings(),changed:changed,weakening:variant);
++        var sample=sampler.Draw(new[]{.3,1.0,2.0});Assert.That(sample,Is.Not.Null);
++        var d=(Point)sample.Picture.Get(names["D"]);var c=(Point)sample.Picture.Get(names["C"]);var e=(Point)sample.Picture.Get(names["E"]);
++        Assert.That(d.DistanceTo(new Point(.5,0)),Is.GreaterThan(.1));Assert.That(e.DistanceTo((d+c)/2),Is.LessThan(1e-9));
++    }
++    [Test]
++    public void An_undefined_auxiliary_circle_is_distinguished_from_a_catalog_mismatch()
++    {
++        var (config,names)=Parser.ParseConfiguration(new[]{"Triangle: A, B, C","D = DumptyPoint(A, B, C)"});
++        var picture=new Picture();
++        picture.TryAdd(names["A"],new Point(0,0),out _);picture.TryAdd(names["B"],new Point(1,0),out _);picture.TryAdd(names["C"],new Point(0,2),out _);
++        // Analytic projection of O=(.5,1) onto the A-symmedian: D=(.8,.4).
++        // The auxiliary OBC circumcircle degenerates, irrespective of construction implementation details.
++        var original=new Point(.8,.4);var variants=ConditionalWeakeningCatalog.For((ConstructedConfigurationObject)names["D"]);
++        Assert.That(ConditionalExtender.AdmitsOriginal(variants[0],picture,original),Is.True);
++        Assert.That(ConditionalExtender.AdmitsOriginal(variants[1],picture,original),Is.Null);
++    }
++    private sealed class BrokenConstructor:IGeometryConstructor
++    {
++        public (PicturesOfConfiguration pictures,ConstructionData data) Construct(Configuration c,int n,Func<IAnalyticObject[]> f)=>throw new NotImplementedException();
++        public (PicturesOfConfiguration pictures,ConstructionData data) ConstructByCloning(PicturesOfConfiguration p,Configuration c)=>throw new NotImplementedException();
++        public ConstructionData Construct(Pictures p,ConstructedConfigurationObject o,bool add)=>throw new NotImplementedException();
++        public IAnalyticObject Construct(Picture p,ConstructedConfigurationObject o,bool add)=>null;
++    }
++    [Test]
++    public void Unconstructible_weakened_samples_never_count_as_a_successful_check()
++    {
++        using var kernel=NinjectUtilities.CreateKernel().AddConstructor();
++        var (config,names)=Parser.ParseConfiguration(new[]{"Triangle: A, B, C","D = Midpoint(A, B)","E = Midpoint(D, C)"});
++        var condition=Parser.ParseTheorem("EqualLineSegments: A, D, C, D",names,false);var goal=Parser.ParseTheorem("LengthRatio2: A, B, C, D",names,false);
++        var sampler=new ConditionalSampler(kernel.Get<IGeometryConstructor>(),config,new ConditionalSearchSettings());
++        var result=new ConditionalExtender(new BrokenConstructor()).Check(config,condition,goal,sampler.On(condition,new Random(61)),sampler.Generic(new Random(71),12),o=>names.Single(n=>n.Value.Equals(o)).Key,()=>{},5000);
++        Assert.That(result.Status,Is.EqualTo("inconclusive"));Assert.That(result.CompletedVariants,Is.Zero);
++    }
++}
