@@ -51,7 +51,7 @@ def read_geo_event(file):
         if text.startswith('Assume:'):
             if condition is not None:raise ValueError('Only one additional condition is supported')
             condition=text.partition(':')[2].strip().removesuffix(' - assumption')
-        elif text.startswith('Triangle:') or re.match(r'^\w+\s*=\s*\w+\(',text):config.append(text)
+        elif text.partition(':')[0] in {'Triangle','RightTriangle','Quadrilateral','CyclicQuadrilateral','LineSegment','LineAndPoint','LineAndTwoPoints'} or re.match(r'^\w+\s*=\s*\w+\(',text):config.append(text)
         elif text.partition(':')[0] in types:goal=text.partition(' - total ranking')[0]
     if condition is None:return None
     if not config or not goal:raise ValueError('Incomplete conditional statement in '+str(file))

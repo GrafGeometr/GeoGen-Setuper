@@ -329,7 +329,7 @@ SymmetryGenerationMode: GenerateBothSymmetricAndAsymmetric
     from discovery import create as create_campaign, run as resume_campaign
     from families import Catalog
     catalog = Catalog.read(ROOT / 'data/construction-catalog.json')
-    if len(catalog.constructions) != 72 or catalog.layouts['LineAndPoint']['pipelineSupported']:
+    if len(catalog.constructions) != 72 or len(catalog.layouts) != 7 or not all(l['pipelineSupported'] for l in catalog.layouts.values()):
         raise RuntimeError('Неправильный каталог возможностей.')
     campaign_family = output / 'family.json'
     campaign_family.write_text(json.dumps(dict(version=1, stories=[str(ROOT / 'examples/input_projections.txt')],

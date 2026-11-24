@@ -1,0 +1,77 @@
+diff --git a/GeoGenIntegration/src/nativeMain/kotlin/Main.kt b/GeoGenIntegration/src/nativeMain/kotlin/Main.kt
+index 027d425..d583142 100644
+--- a/GeoGenIntegration/src/nativeMain/kotlin/Main.kt
++++ b/GeoGenIntegration/src/nativeMain/kotlin/Main.kt
+@@ -38,6 +38,44 @@ fun GeoGenContext.parseGeoGenInitial(line: String) {
+     check(index != -1) { "Expected initial object" }
+     val names = line.substring(index + 1).split(",").map(String::trim)
+     comment(line)
++    val layout = line.substring(0, index).trim()
++    if (witness != null) {
++        val p = witness!!
++        check(p.all { it.isFinite() }) { "Invalid conditional witness" }
++        fun number(v: Double): String {
++            val scaled = kotlin.math.round(kotlin.math.abs(v)*1e12).toLong()
++            return (if (v < 0) "-" else "") + (scaled/1000000000000L).toString() + "." + (scaled%1000000000000L).toString().padStart(12,'0')
++        }
++        fun point(n: String, x: Double, y: Double) = "$n = #(${number(120*x-60)}${if (y*120-40 < 0) "" else "+"}${number(y*120-40)}i)"
++        val xy: List<Pair<Double,Double>> = when (layout) {
++            "Triangle" -> { check(p.size == 2); listOf(0.0 to 0.0,1.0 to 0.0,p[0] to p[1]) }
++            "RightTriangle" -> { check(p.size == 1); listOf(0.0 to 0.0,1.0 to 0.0,0.0 to p[0]) }
++            "Quadrilateral" -> { check(p.size == 4); listOf(0.0 to 0.0,1.0 to 0.0,p[0] to p[1],p[2] to p[3]) }
++            "CyclicQuadrilateral" -> {
++                check(p.size == 3)
++                val weights = p.map { kotlin.math.exp(it) } + 1.0
++                var angle = 0.0
++                weights.map { val q = kotlin.math.cos(angle) to kotlin.math.sin(angle); angle += 2*kotlin.math.PI*it/weights.sum(); q }
++            }
++            "LineSegment" -> { check(p.isEmpty()); listOf(0.0 to 0.0,1.0 to 0.0) }
++            "LineAndPoint" -> { check(p.isEmpty()); listOf(0.0 to 1.0) }
++            "LineAndTwoPoints" -> { check(p.size == 2); listOf(0.0 to 1.0,p[0] to p[1]) }
++            else -> error("Unexpected conditional layout $layout")
++        }
++        val offset = if (layout.startsWith("LineAnd")) 1 else 0
++        check(names.size == xy.size + offset) { "Invalid initial argument count" }
++        if (offset == 1) text("${names[0]} = line(-60-40i,60-40i)")
++        xy.forEachIndexed { i, q -> text(point(names[i+offset],q.first,q.second)) }
++        when (layout) {
++            "Triangle", "RightTriangle" -> {
++                triangles["triangle(${names.joinToString()})"] = "t"
++                text("[orange] [fill] t = triangle(${names.joinToString()})")
++            }
++            "Quadrilateral", "CyclicQuadrilateral" -> text("[orange] [fill] polygon(${names.joinToString()})")
++        }
++        text()
++        return
++    }
+     text(when (val name = line.substring(0, index).trim()) {
+         "LineSegment" -> {
+             check(names.size == 2) { "Expected 2 points" }
+@@ -101,23 +139,12 @@ fun GeoGenContext.parseGeoGenInitial(line: String) {
+             """.trimIndent()
+         }
+         "LineAndPoint" -> {
+-            check(names.size == 3) { "Expected 3 points" }
+-            """
+-                ${names[0]} = #(20+60i)
+-                ${names[1]} = #(60-40i)
+-                ${names[2]} = #(-60-40i)
+-                [orange] segment(${names[0]}, ${names[1]})
+-            """.trimIndent()
++            check(names.size == 2) { "Expected a line and a point" }
++            "${names[0]} = line(-60-40i,60-40i)\n${names[1]} = #(20+60i)"
+         }
+         "LineAndTwoPoints" -> {
+-            check(names.size == 4) { "Expected 4 points" }
+-            """
+-                ${names[0]} = #(20+60i)
+-                ${names[1]} = #(60-40i)
+-                ${names[2]} = #(-60-40i)
+-                ${names[3]} = #(-30+40i)
+-                [orange] segment(${names[0]}, ${names[1]})
+-            """.trimIndent()
++            check(names.size == 3) { "Expected a line and two points" }
++            "${names[0]} = line(-60-40i,60-40i)\n${names[1]} = #(20+60i)\n${names[2]} = #(-30+40i)"
+         }
+         else -> error("Unexpected $name")
+     })

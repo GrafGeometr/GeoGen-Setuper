@@ -1,0 +1,27 @@
+[
+  {
+    "status": "timeout",
+    "condition": "ParallelLines: [D, H], [D, J]",
+    "theorem": "CollinearPoints: D, H, J"
+  },
+  {
+    "status": "timeout",
+    "condition": "ParallelLines: [B, G], [G, J]",
+    "theorem": "CollinearPoints: B, G, J"
+  },
+  {
+    "status": "timeout",
+    "condition": "ParallelLines: [B, G], [G, J]",
+    "theorem": "EqualLineSegments: A, B, B, D"
+  },
+  {
+    "status": "timeout",
+    "condition": "ParallelLines: [B, G], [G, J]",
+    "theorem": "EqualLineSegments: A, G, D, G"
+  },
+  {
+    "status": "rejected",
+    "condition": "ParallelLines: [B, G], [G, J]",
+    "theorem": "EqualLineSegments: A, I, I, J"
+  }
+]

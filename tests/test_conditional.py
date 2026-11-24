@@ -109,3 +109,16 @@ class ConditionalExtendingProtocolTests(unittest.TestCase):
                 with patch('conditional.check_event',return_value={'status':status}):runtime.check(Path(t))
                 self.assertEqual((Path(t)/'BAD_example.geo').exists(),status=='rejected')
                 self.assertEqual(p.exists(),status!='rejected')
+
+
+class LayoutGeoParsingTest(unittest.TestCase):
+    def test_every_layout_survives_geo_comment_roundtrip(self):
+        import tempfile
+        import conditional
+        for initial in ('Triangle: A, B, C', 'RightTriangle: A, B, C',
+                        'Quadrilateral: A, B, C, D', 'CyclicQuadrilateral: A, B, C, D',
+                        'LineSegment: A, B', 'LineAndPoint: l, A', 'LineAndTwoPoints: l, A, B'):
+            with self.subTest(initial=initial), tempfile.TemporaryDirectory() as directory:
+                p=Path(directory)/'test.geo'
+                p.write_text('!'+initial+'\n!Assume: EqualLineSegments: A, B, A, C\n!CollinearPoints: A, B, C - total ranking 1\n')
+                self.assertEqual(conditional.read_geo_event(p)['configuration'], initial)

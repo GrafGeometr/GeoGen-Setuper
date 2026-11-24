@@ -1,0 +1,12 @@
+Constructions:
+Midpoint
+PerpendicularProjectionOnLineFromPoints
+
+Initial configuration:
+CyclicQuadrilateral: A, B, C, D
+
+Iterations: 1
+MaximalPoints: 1
+MaximalLines: 0
+MaximalCircles: 0
+SymmetryGenerationMode: GenerateBothSymmetricAndAsymmetric

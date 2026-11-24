@@ -1,0 +1,18 @@
+Constructions:
+Midpoint
+IntersectionOfLinesFromPoints
+SecondIntersectionOfCircleAndLineFromPoints
+SecondIntersectionOfTwoCircumcircles
+
+Initial configuration:
+Quadrilateral: A, B, C, D
+P = IntersectionOfLinesFromPoints(A, C, B, D)
+Q = SecondIntersectionOfTwoCircumcircles(P, A, B, C, D)
+M = MidpointOfOppositeArc(B, A, P)
+N = MidpointOfOppositeArc(C, D, P)
+
+Iterations: 2
+MaximalPoints: 2147483647
+MaximalLines: 0
+MaximalCircles: 0
+SymmetryGenerationMode: GenerateBothSymmetricAndAsymmetric

@@ -1,0 +1,413 @@
+diff --git a/Source/Launchers/GeoGen.MainLauncher/BusinessLogic/BatchRunner.cs b/Source/Launchers/GeoGen.MainLauncher/BusinessLogic/BatchRunner.cs
+index 1a1ece8..7c14e95 100644
+--- a/Source/Launchers/GeoGen.MainLauncher/BusinessLogic/BatchRunner.cs
++++ b/Source/Launchers/GeoGen.MainLauncher/BusinessLogic/BatchRunner.cs
+@@ -67,6 +67,7 @@ namespace GeoGen.MainLauncher
+                 }
+                 catch (Exception e)
+                 {
++                    Environment.ExitCode = 1;
+                     // Log which file failed and the exception
+                     Log.Error(e, "Couldn't perform the algorithm on input file {number} with path {path}", index + 1, input.FilePath);
+                 }
+diff --git a/Source/Launchers/GeoGen.MainLauncher/BusinessLogic/ProblemGenerationRunner/ProblemGenerationRunner.cs b/Source/Launchers/GeoGen.MainLauncher/BusinessLogic/ProblemGenerationRunner/ProblemGenerationRunner.cs
+index a29c8a0..f9ea88f 100644
+--- a/Source/Launchers/GeoGen.MainLauncher/BusinessLogic/ProblemGenerationRunner/ProblemGenerationRunner.cs
++++ b/Source/Launchers/GeoGen.MainLauncher/BusinessLogic/ProblemGenerationRunner/ProblemGenerationRunner.cs
+@@ -561,7 +561,7 @@ namespace GeoGen.MainLauncher
+                 if(rankedTheorem.Conditional!=null){
+                     var sample=rankedTheorem.Conditional.Samples[0];
+                     result += "\n\nAssume: "+formatter.FormatTheorem(rankedTheorem.Conditional.Assumption)+
+-                        "\nWitness: "+sample[0].ToString("R",System.Globalization.CultureInfo.InvariantCulture)+", "+sample[1].ToString("R",System.Globalization.CultureInfo.InvariantCulture);
++                        "\nWitness: "+string.Join(", ",sample.Select(v=>v.ToString("R",System.Globalization.CultureInfo.InvariantCulture)));
+                 }
+                 // Add the theorem
+                 result += $"{(rankedTheorem.Conditional==null ? "\n\n" : "\n")}{formatter.FormatTheorem(rankedTheorem.Theorem)}" +
+diff --git a/Source/Launchers/GeoGen.MainLauncher/ConditionalCheckCommand.cs b/Source/Launchers/GeoGen.MainLauncher/ConditionalCheckCommand.cs
+index c0430ce..6fc8a7a 100644
+--- a/Source/Launchers/GeoGen.MainLauncher/ConditionalCheckCommand.cs
++++ b/Source/Launchers/GeoGen.MainLauncher/ConditionalCheckCommand.cs
+@@ -33,8 +33,8 @@ internal static class ConditionalCheckCommand
+                 if(counter!=null)result=new{status="counterexample",message="The conclusion fails on a sample satisfying the condition",coordinates=counter.Parameters,conditionResidual=ConditionalPredicate.Residual(counter.Picture,condition),goalResidual=ConditionalPredicate.Residual(counter.Picture,goal)};
+                 else {
+                     var generic=sampler.Generic(random,12);var counters=ConditionalSearchEngine.Counters(generic,condition,goal);
+-                    result=counters.Length<2 ? (object)new{status="inconclusive",message="No sufficient counterexamples without the condition; essentiality is not confirmed",samples=roots.Count,genericSamples=generic.Count} :
+-                        new{status="accepted",truth="conditioned-sampled-valid",samples=roots.Count,genericSamples=generic.Count,genericCounterexamples=counters.Length,counterexamples=counters,conditionSamples=roots.Select(s=>s.Parameters).ToArray(),draws=sampler.Draws,seconds=clock.Elapsed.TotalSeconds,notice="Numerical conditional conjecture; ordinary Extending weakening tests are not applied"};
++                    result=counters.Length<2 ? (object)new{status="inconclusive",message="No sufficient counterexamples without the condition; essentiality is not confirmed",samples=roots.Count,distinctConditionSamples=roots.Select(r=>string.Join(",",r.Parameters.Select(v=>Math.Round(v,6)))).Distinct().Count(),genericSamples=generic.Count} :
++                        new{status="accepted",truth="conditioned-sampled-valid",samples=roots.Count,distinctConditionSamples=roots.Select(r=>string.Join(",",r.Parameters.Select(v=>Math.Round(v,6)))).Distinct().Count(),genericSamples=generic.Count,genericCounterexamples=counters.Length,counterexamples=counters,conditionSamples=roots.Select(s=>s.Parameters).ToArray(),draws=sampler.Draws,seconds=clock.Elapsed.TotalSeconds,notice="Numerical conditional conjecture; ordinary Extending weakening tests are not applied"};
+                 }
+             }
+         } catch(TimeoutException){result=new{status="timeout",message="Conditional check exceeded time limit"};}
+diff --git a/Source/Launchers/GeoGen.MainLauncher/ConditionalExtendingCommand.cs b/Source/Launchers/GeoGen.MainLauncher/ConditionalExtendingCommand.cs
+index 0a38c0f..46867b6 100644
+--- a/Source/Launchers/GeoGen.MainLauncher/ConditionalExtendingCommand.cs
++++ b/Source/Launchers/GeoGen.MainLauncher/ConditionalExtendingCommand.cs
+@@ -35,7 +35,7 @@ internal static class ConditionalExtendingCommand
+                 if(perVariant<1||perVariant>3600000)throw new ArgumentException("Invalid per-variant budget");
+                 var extension=extender.Check(configuration,condition,goal,roots,generic,o=>names.First(n=>n.Value.Equals(o)).Key,Deadline,perVariant);
+                 result=new{status=extension.Status,message=extension.Status switch {"rejected"=>"Conclusion survives a weaker definition with the same condition","inconclusive"=>"Some weakenings remain undecided; no acceptance is claimed","counterexample"=>"Original conclusion fails on a newly found conditional sample",_=>"All catalog weakenings refuted under the same condition"},
+-                    truth="conditioned-sampled-valid",samples=roots.Count,genericCounterexamples=counters.Length,counterexamples=counters,conditionSamples=roots.Select(r=>r.Parameters).ToArray(),
++                    truth="conditioned-sampled-valid",samples=roots.Count,distinctConditionSamples=roots.Select(r=>string.Join(",",r.Parameters.Select(v=>Math.Round(v,6)))).Distinct().Count(),genericCounterexamples=counters.Length,counterexamples=counters,conditionSamples=roots.Select(r=>r.Parameters).ToArray(),
+                     weakening=extension,seconds=clock.Elapsed.TotalSeconds,notice="Finite numerical conditional weakening checks, not a formal proof or exhaustive component analysis"};
+             }
+         } catch(TimeoutException){result=new{status="timeout",message="Conditional Extending exceeded the shared deadline",weakening=extender?.Result("timeout")};}
+@@ -51,7 +51,7 @@ internal static class ConditionalExtendingCommand
+             if(line.StartsWith("Assume:")){
+                 if(condition!=null)throw new ArgumentException("Exactly one condition is supported");
+                 condition=line[7..].Trim();if(condition.EndsWith(" - assumption"))condition=condition[..^13];
+-            }else if(line.StartsWith("Triangle:") || System.Text.RegularExpressions.Regex.IsMatch(line,@"^\w+\s*=\s*\w+\("))config.Add(line.Replace("{","").Replace("}",""));
++            }else if(Enum.TryParse<LooseObjectLayout>(line.Split(':')[0],out _) || System.Text.RegularExpressions.Regex.IsMatch(line,@"^\w+\s*=\s*\w+\("))config.Add(line.Replace("{","").Replace("}",""));
+             else if(Enum.TryParse<TheoremType>(line.Split(':')[0],out _))goal=line.Split(" - total ranking")[0];
+         }
+         if(condition==null||goal==null||config.Count==0)throw new ArgumentException("Incomplete conditional .geo statement");
+diff --git a/Source/Library/GeoGen.ProblemGenerator/ConditionalExtender.cs b/Source/Library/GeoGen.ProblemGenerator/ConditionalExtender.cs
+index 18794d7..d825157 100644
+--- a/Source/Library/GeoGen.ProblemGenerator/ConditionalExtender.cs
++++ b/Source/Library/GeoGen.ProblemGenerator/ConditionalExtender.cs
+@@ -39,10 +39,43 @@ public sealed class ConditionalExtender
+         var plans=configuration.ConstructedObjects.Select(o=>(obj:o,variants:ConditionalWeakeningCatalog.For(o))).ToArray();
+         TotalVariants=plans.Sum(p=>p.variants.Length);DefinitionsWithoutAlternatives=plans.Count(p=>p.variants.Length==0);
+         var originalSampler=new ConditionalSampler(_constructor,configuration,new ConditionalSearchSettings(),checkDeadline);
++        var layout=configuration.LooseObjectsHolder.Layout;
++        if(layout is LooseObjectLayout.RightTriangle or LooseObjectLayout.CyclicQuadrilateral){
++            TotalVariants++;
++            var relaxed=layout==LooseObjectLayout.RightTriangle ? LooseObjectLayout.Triangle : LooseObjectLayout.Quadrilateral;
++            var roots=configuration.LooseObjects;
++            var intrinsic=layout==LooseObjectLayout.RightTriangle ? new Theorem(TheoremType.PerpendicularLines,
++                new TheoremObject[]{new LineTheoremObject(roots[0],roots[1]),new LineTheoremObject(roots[0],roots[2])}) : new Theorem(TheoremType.ConcyclicPoints,roots.Select(o=>(TheoremObject)new PointTheoremObject(o)));
++            var e=new ConditionalWeakeningEvidence{Object="initial-layout",Construction=layout.ToString(),Arguments=roots.Select(name).ToArray(),
++                Variant=0,Description="Relax initial layout to "+relaxed,Dimension=ConditionalLayout.Dimension(relaxed),Status="inconclusive"};
++            Evidence.Add(e);var clock=Stopwatch.StartNew();
++            void RootDeadline(){checkDeadline();if(clock.ElapsedMilliseconds>=variantMilliseconds)throw new VariantDeadlineException();}
++            var sampling=new ConditionalSampler(_constructor,configuration,new ConditionalSearchSettings(),RootDeadline,layoutOverride:relaxed);
++            var samples=new List<double[]>();var ambiguous=false;
++            try {
++                for(var batch=0;batch<2;batch++){
++                    var count=0;
++                    foreach(var sample in sampling.EnumerateOn(condition,new Random(ConditionalSearchEngine.StableSeed("initial|"+layout+"|"+batch+"|"+new OutputFormatter(configuration.AllObjects).FormatTheorem(condition))))){
++                        var residual=ConditionalPredicate.Residual(sample.Picture,goal);if(!residual.HasValue)continue;
++                        count++;e.Samples++;samples.Add(sample.Parameters);
++                        if(Math.Abs(residual.Value)>1e-5){e.Status="counterexample";e.Coordinates=new[]{sample.Parameters};e.GoalResidual=residual;
++                            e.ConditionResidual=ConditionalPredicate.Residual(sample.Picture,condition);break;}
++                        if(Math.Abs(residual.Value)>2e-8)ambiguous=true;
++                        if(ConditionalPredicate.Residual(sample.Picture,intrinsic) is double r && Math.Abs(r)>1e-5)e.ChangedDefinitionSamples++;
++                    }
++                    if(e.Status=="counterexample")break;
++                    if(count<8){ambiguous=true;break;}e.IndependentBatches++;
++                }
++                if(e.Status!="counterexample"&&!ambiguous&&e.IndependentBatches==2&&e.ChangedDefinitionSamples>=2){
++                    e.Status="generalized";e.Coordinates=samples.ToArray();e.Draws=sampling.Draws;return Result("rejected");
++                }
++            }catch(VariantDeadlineException){e.Message="Initial-layout weakening budget exhausted";}
++            finally{e.Draws=sampling.Draws;}
++        }
+         foreach(var (obj,variants) in plans)for(var index=0;index<variants.Length;index++){
+             checkDeadline();var variant=variants[index];
+             var evidence=new ConditionalWeakeningEvidence{Object=name(obj),Construction=obj.Construction.Name,Arguments=obj.PassedArguments.FlattenedList.Select(name).ToArray(),
+-                Variant=index,Description=variant.Description,Dimension=2+variant.Parameters.Length,Status="inconclusive"};Evidence.Add(evidence);
++                Variant=index,Description=variant.Description,Dimension=ConditionalLayout.Dimension(configuration.LooseObjectsHolder.Layout)+variant.Parameters.Length,Status="inconclusive"};Evidence.Add(evidence);
+             // A purported weakening must actually contain the original definition, on both constrained and generic inputs.
+             var undefined=false;
+             foreach(var sample in original.Concat(generic)){
+@@ -65,7 +98,7 @@ public sealed class ConditionalExtender
+                         if(!residual.HasValue)continue;
+                         evidence.Samples++;valid++;
+                         if(Math.Abs(residual.Value)>1e-5){
+-                            var originalAtShape=originalSampler.Draw(sample.Parameters[0],sample.Parameters[1]);_originalDraws=originalSampler.Draws;
++                            var originalAtShape=originalSampler.Draw(sample.Parameters[..originalSampler.RootDimension]);_originalDraws=originalSampler.Draws;
+                             if(originalAtShape!=null && ConditionalPredicate.Holds(originalAtShape.Picture,condition) &&
+                                 ConditionalPredicate.Residual(originalAtShape.Picture,goal) is double originalResidual && Math.Abs(originalResidual)>1e-5){
+                                 evidence.Status="original-counterexample";evidence.Coordinates=new[]{originalAtShape.Parameters};evidence.GoalResidual=originalResidual;
+diff --git a/Source/Library/GeoGen.ProblemGenerator/ConditionalLayout.cs b/Source/Library/GeoGen.ProblemGenerator/ConditionalLayout.cs
+new file mode 100644
+index 0000000..cec1292
+--- /dev/null
++++ b/Source/Library/GeoGen.ProblemGenerator/ConditionalLayout.cs
+@@ -0,0 +1,55 @@
++using GeoGen.AnalyticGeometry;
++using GeoGen.Core;
++namespace GeoGen.ProblemGenerator;
++
++/// <summary>Similarity-normalized charts. Parameters are serialized as the witness.</summary>
++public static class ConditionalLayout
++{
++    public static int Dimension(LooseObjectLayout layout)=>layout switch {
++        LooseObjectLayout.LineSegment or LooseObjectLayout.LineAndPoint=>0,
++        LooseObjectLayout.RightTriangle=>1,
++        LooseObjectLayout.Triangle or LooseObjectLayout.LineAndTwoPoints=>2,
++        LooseObjectLayout.CyclicQuadrilateral=>3,
++        LooseObjectLayout.Quadrilateral=>4,
++        _=>throw new ArgumentException("Unsupported conditional layout: "+layout)};
++    public static double[] Start(LooseObjectLayout layout,Random random) {
++        double R()=>random.NextDouble();
++        return layout switch {
++            LooseObjectLayout.Triangle=>new[]{-.6+2.2*R(),.2+1.7*R()},
++            LooseObjectLayout.RightTriangle=>new[]{.2+1.7*R()},
++            LooseObjectLayout.Quadrilateral=>new[]{.3+R(),.4+R(),-.5+R(),.4+R()},
++            LooseObjectLayout.CyclicQuadrilateral=>new[]{2*R()-1,2*R()-1,2*R()-1},
++            LooseObjectLayout.LineAndTwoPoints=>new[]{-1+2*R(),(R()<.5?-1:1)*(.2+2*R())},
++            _=>new double[Dimension(layout)]};
++    }
++    public static IAnalyticObject[] Objects(LooseObjectLayout layout,double[] p) {
++        if(p.Length!=Dimension(layout)||p.Any(v=>!double.IsFinite(v)||Math.Abs(v)>6))return null;
++        var a=new Point(0,0);var b=new Point(1,0);
++        switch(layout){
++            case LooseObjectLayout.LineSegment:return new IAnalyticObject[]{a,b};
++            case LooseObjectLayout.LineAndPoint:return new IAnalyticObject[]{new Line(a,b),new Point(0,1)};
++            case LooseObjectLayout.LineAndTwoPoints:
++                if(Math.Abs(p[1])<.06)return null;
++                return new IAnalyticObject[]{new Line(a,b),new Point(0,1),new Point(p[0],p[1])};
++            case LooseObjectLayout.Triangle:
++                if(p[0]<-2||p[0]>3||p[1]<.06||p[1]>3)return null;
++                return new IAnalyticObject[]{a,b,new Point(p[0],p[1])};
++            case LooseObjectLayout.RightTriangle:
++                if(p[0]<.06||p[0]>3)return null;
++                return new IAnalyticObject[]{a,b,new Point(0,p[0])};
++            case LooseObjectLayout.Quadrilateral:
++                var q=new[]{a,b,new Point(p[0],p[1]),new Point(p[2],p[3])};
++                for(var i=0;i<4;i++) {
++                    var x=q[i];var y=q[(i+1)%4];var z=q[(i+2)%4];
++                    if((y.X-x.X)*(z.Y-y.Y)-(y.Y-x.Y)*(z.X-y.X)<1e-5)return null;
++                }
++                return q.Cast<IAnalyticObject>().ToArray();
++            case LooseObjectLayout.CyclicQuadrilateral:
++                var weights=p.Select(Math.Exp).Append(1).ToArray();var sum=weights.Sum();var angle=0.0;
++                var points=new IAnalyticObject[4];
++                for(var i=0;i<4;i++){points[i]=new Point(Math.Cos(angle),Math.Sin(angle));angle+=2*Math.PI*weights[i]/sum;}
++                return points;
++            default:throw new ArgumentException("Unsupported layout");
++        }
++    }
++}
+diff --git a/Source/Library/GeoGen.ProblemGenerator/ConditionalPredicate.cs b/Source/Library/GeoGen.ProblemGenerator/ConditionalPredicate.cs
+index 4b48d34..2f085a0 100644
+--- a/Source/Library/GeoGen.ProblemGenerator/ConditionalPredicate.cs
++++ b/Source/Library/GeoGen.ProblemGenerator/ConditionalPredicate.cs
+@@ -7,7 +7,7 @@ namespace GeoGen.ProblemGenerator;
+ public static class ConditionalPredicate
+ {
+     private static double Cross(Point a,Point b,Point c)=>(b.X-a.X)*(c.Y-a.Y)-(b.Y-a.Y)*(c.X-a.X);
+-    public static double? Residual(Picture picture,Theorem theorem)
++    public static double? Residual(Picture picture,Theorem theorem,Picture reference=null)
+     {
+         try {
+             var objects=theorem.InvolvedObjectsList;
+@@ -32,7 +32,10 @@ public static class ConditionalPredicate
+                 case TheoremType.PerpendicularLines:{
+                     var a=L(objects[0]);var b=L(objects[1]);var scale=Math.Sqrt((a.A*a.A+a.B*a.B)*(b.A*b.A+b.B*b.B));
+                     if(scale<1e-12)return null;
+-                    value=theorem.Type==TheoremType.ParallelLines ? (a.A*b.B-a.B*b.A)/scale : (a.A*b.A+a.B*b.B)/scale;break;
++                    var sign=1.0;
++                    if(reference!=null){var ar=(Line)reference.Construct((BaseTheoremObject)objects[0]);var br=(Line)reference.Construct((BaseTheoremObject)objects[1]);
++                        if(a.A*ar.A+a.B*ar.B<0)sign=-sign;if(b.A*br.A+b.B*br.B<0)sign=-sign;}
++                    value=sign*(theorem.Type==TheoremType.ParallelLines ? (a.A*b.B-a.B*b.A)/scale : (a.A*b.A+a.B*b.B)/scale);break;
+                 }
+                 case TheoremType.EqualLineSegments:
+                 case TheoremType.LengthRatio2:
+diff --git a/Source/Library/GeoGen.ProblemGenerator/ConditionalSampler.cs b/Source/Library/GeoGen.ProblemGenerator/ConditionalSampler.cs
+index 668829a..093394d 100644
+--- a/Source/Library/GeoGen.ProblemGenerator/ConditionalSampler.cs
++++ b/Source/Library/GeoGen.ProblemGenerator/ConditionalSampler.cs
+@@ -14,14 +14,16 @@ public sealed class ConditionalSampler
+     private readonly Action _checkBudget;
+     private readonly ConstructedConfigurationObject _changed;
+     private readonly ConditionalWeakening _weakening;
+-    public int Dimension=>2+(_weakening?.Parameters.Length??0);
++    public LooseObjectLayout Layout { get; }
++    public int RootDimension=>ConditionalLayout.Dimension(Layout);
++    public int Dimension=>RootDimension+(_weakening?.Parameters.Length??0);
+     public long Draws { get; private set; }
+     public long Iterations { get; private set; }
+     public ConditionalSampler(IGeometryConstructor constructor,Configuration configuration,ConditionalSearchSettings settings,Action checkBudget=null,
+-        ConstructedConfigurationObject changed=null,ConditionalWeakening weakening=null)
++        ConstructedConfigurationObject changed=null,ConditionalWeakening weakening=null,LooseObjectLayout? layoutOverride=null)
+     {
+-        if(configuration.LooseObjectsHolder.Layout!=LooseObjectLayout.Triangle || configuration.LooseObjects.Count!=3)
+-            throw new ArgumentException("Conditional sampling currently supports Triangle only");
++        Layout=layoutOverride??configuration.LooseObjectsHolder.Layout;
++        _=ConditionalLayout.Dimension(Layout);
+         if((changed==null)!=(weakening==null) || changed!=null&&!configuration.ConstructedObjects.Contains(changed))throw new ArgumentException("Invalid weakening target");
+         _constructor=constructor;_configuration=configuration;_settings=settings;_checkBudget=checkBudget;_changed=changed;_weakening=weakening;
+     }
+@@ -30,25 +32,24 @@ public sealed class ConditionalSampler
+     {
+         _checkBudget?.Invoke();Draws++;
+         if(parameters.Length!=Dimension||parameters.Any(v=>!double.IsFinite(v)))return null;
+-        var x=parameters[0];var y=parameters[1];
+-        if(x< -2 || x>3 || y<.06 || y>3)return null;
+-        for(var i=2;i<Dimension;i++){
+-            var v=parameters[i];var type=_weakening.Parameters[i-2];
++        var root=ConditionalLayout.Objects(Layout,parameters[..RootDimension]);if(root==null)return null;
++        for(var i=RootDimension;i<Dimension;i++){
++            var v=parameters[i];var type=_weakening.Parameters[i-RootDimension];
+             if(type==WeakParameter.Angle ? Math.Abs(v)>Math.PI+1e-4 : type==WeakParameter.Radius ? v<1e-5||v>1000 : Math.Abs(v)>100)return null;
+         }
+         try {
+             Picture picture;
+             if(_weakening==null){
+-                var (pictures,data)=_constructor.Construct(_configuration,1,()=>new IAnalyticObject[]{new Point(0,0),new Point(1,0),new Point(x,y)});
++                var (pictures,data)=_constructor.Construct(_configuration,1,()=>root);
+                 if(pictures==null || data.InconstructibleObject!=null || data.Duplicates!=default)return null;
+                 picture=pictures.First();
+             } else {
+-                picture=new Picture();var root=new[]{new Point(0,0),new Point(1,0),new Point(x,y)};
+-                for(var i=0;i<3;i++)picture.TryAdd(_configuration.LooseObjects[i],root[i],out _);
++                picture=new Picture();
++                for(var i=0;i<root.Length;i++)picture.TryAdd(_configuration.LooseObjects[i],root[i],out _);
+                 foreach(var obj in _configuration.ConstructedObjects){
+                     IAnalyticObject value;
+                     if(obj.Equals(_changed)){
+-                        value=_weakening.Draw(picture,parameters[2..]);if(value==null)return null;
++                        value=_weakening.Draw(picture,parameters[RootDimension..]);if(value==null)return null;
+                         picture.TryAdd(obj,value,out var duplicate);if(duplicate!=null)return null;
+                     } else {
+                         value=_constructor.Construct(picture,obj,true);if(value==null)return null;
+@@ -71,8 +72,8 @@ public sealed class ConditionalSampler
+     }
+     private double[] Start(Random random)
+     {
+-        var p=new double[Dimension];p[0]=-.6+2.2*random.NextDouble();p[1]=.2+1.7*random.NextDouble();
+-        for(var i=2;i<Dimension;i++)p[i]=_weakening.Parameters[i-2] switch {
++        var p=new double[Dimension];ConditionalLayout.Start(Layout,random).CopyTo(p,0);
++        for(var i=RootDimension;i<Dimension;i++)p[i]=_weakening.Parameters[i-RootDimension] switch {
+             WeakParameter.Angle=>-Math.PI+2*Math.PI*random.NextDouble(),WeakParameter.Radius=>.1+3*random.NextDouble(),_=>-3+6*random.NextDouble()};
+         return p;
+     }
+@@ -82,14 +83,15 @@ public sealed class ConditionalSampler
+         for(var i=0;i<count*30 && result.Count<count;i++){var sample=Draw(Start(random));if(sample!=null)result.Add(sample);}
+         return result;
+     }
+-    private (ConditionSample sample,double residual)? At(Theorem condition,double[] coordinates)
++    private (ConditionSample sample,double residual)? At(Theorem condition,double[] coordinates,Picture reference=null)
+     {
+         var sample=Draw(coordinates);if(sample==null)return null;
+-        var residual=ConditionalPredicate.Residual(sample.Picture,condition);return residual.HasValue ? (sample,residual.Value) : null;
++        var residual=ConditionalPredicate.Residual(sample.Picture,condition,reference);return residual.HasValue ? (sample,residual.Value) : null;
+     }
+     public List<ConditionSample> On(Theorem condition,Random random)=>EnumerateOn(condition,random).ToList();
+     public IEnumerable<ConditionSample> EnumerateOn(Theorem condition,Random random)
+     {
++        if(Dimension==0)yield break;
+         var roots=new List<ConditionSample>();
+         for(var start=0;start<_settings.Starts && roots.Count<_settings.Samples;start++){
+             var current=At(condition,Start(random));
+@@ -98,12 +100,12 @@ public sealed class ConditionalSampler
+                 var gradient=new double[Dimension];var valid=true;var norm=0.0;
+                 for(var axis=0;axis<Dimension;axis++){
+                     var plus=coordinates.ToArray();var minus=coordinates.ToArray();plus[axis]+=h;minus[axis]-=h;
+-                    var xp=At(condition,plus);var xm=At(condition,minus);if(!xp.HasValue||!xm.HasValue){valid=false;break;}
++                    var xp=At(condition,plus,sample.Picture);var xm=At(condition,minus,sample.Picture);if(!xp.HasValue||!xm.HasValue){valid=false;break;}
+                     gradient[axis]=(xp.Value.residual-xm.Value.residual)/(2*h);norm+=gradient[axis]*gradient[axis];
+                 }
+                 if(!valid||!double.IsFinite(norm)||norm<1e-10)break;
+                 if(Math.Abs(f)<1e-12){
+-                    if(roots.All(old=>old.Parameters.Zip(coordinates,(a,b)=>(a-b)*(a-b)).Sum()>=_settings.MinSampleDistance*_settings.MinSampleDistance)){
++                    if(Dimension==1 || roots.All(old=>old.Parameters.Zip(coordinates,(a,b)=>(a-b)*(a-b)).Sum()>=_settings.MinSampleDistance*_settings.MinSampleDistance)){
+                         roots.Add(sample);yield return sample;
+                     }
+                     break;
+@@ -112,7 +114,7 @@ public sealed class ConditionalSampler
+                 if(length>.4)for(var i=0;i<Dimension;i++)step[i]*=.4/length;
+                 (ConditionSample sample,double residual)? next=null;
+                 for(var scale=1.0;scale>=1.0/128;scale*=.5){
+-                    var trial=At(condition,coordinates.Zip(step,(v,d)=>v+scale*d).ToArray());
++                    var trial=At(condition,coordinates.Zip(step,(v,d)=>v+scale*d).ToArray(),sample.Picture);
+                     if(trial.HasValue && Math.Abs(trial.Value.residual)<Math.Abs(f)){next=trial;break;}
+                 }
+                 if(!next.HasValue)break;current=next;
+diff --git a/Source/Library/GeoGen.ProblemGenerator/ConditionalSearchEngine.cs b/Source/Library/GeoGen.ProblemGenerator/ConditionalSearchEngine.cs
+index 2ed522f..54f11eb 100644
+--- a/Source/Library/GeoGen.ProblemGenerator/ConditionalSearchEngine.cs
++++ b/Source/Library/GeoGen.ProblemGenerator/ConditionalSearchEngine.cs
+@@ -62,7 +62,7 @@ public sealed class ConditionalSearchEngine : IDisposable
+     }
+     public IEnumerable<ProblemGeneratorOutput> Wrap(IEnumerable<ProblemGeneratorOutput> ordinary,ProblemGeneratorInput input)
+     {
+-        if(input.InitialConfiguration.LooseObjectsHolder.Layout!=LooseObjectLayout.Triangle)throw new ArgumentException("Conditional search currently supports Triangle only");
++        if(ConditionalLayout.Dimension(input.InitialConfiguration.LooseObjectsHolder.Layout)==0){Log(new{kind="no-shape-freedom",layout=input.InitialConfiguration.LooseObjectsHolder.Layout.ToString()});Dispose();yield break;}
+         var budget=input.Constructions.Select(c=>c.OutputType).Distinct().Sum(t=>(long)input.MaximalNumbersOfObjectsToAdd[t]);
+         var last=(int)Math.Min(input.NumberOfIterations,budget);
+         try {
+@@ -88,7 +88,7 @@ public sealed class ConditionalSearchEngine : IDisposable
+             foreach(var condition in Candidates(frame,random)){
+                 CheckBudget();if(tried++>=_settings.MaxConditionsPerConfiguration)break;ConditionsTried++;
+                 if(ConditionsTried%16==0)Log(new{kind="progress",Configurations,Terminals,ConditionsTried,SolvedConditions,FailedSampling,EssentialGoals,draws=Draws+sampler.Draws,seconds=_clock.Elapsed.TotalSeconds});
+-                if(condition.Type==TheoremType.CollinearPoints && condition.GetInnerConfigurationObjects().All(o=>frame.Configuration.LooseObjects.Contains(o)))continue;
++                
+                 if(generic.Count(s=>ConditionalPredicate.Residual(s.Picture,condition) is double r && Math.Abs(r)>1e-5)<2){GenericConditions++;continue;}
+                 var roots=sampler.On(condition,random);
+                 if(roots.Count<_settings.Samples){FailedSampling++;continue;}
+diff --git a/Source/Tests/UnitTests/GeoGen.ConfigurationGenerator.Tests/ConditionalLayoutsTest.cs b/Source/Tests/UnitTests/GeoGen.ConfigurationGenerator.Tests/ConditionalLayoutsTest.cs
+new file mode 100644
+index 0000000..eab0b5a
+--- /dev/null
++++ b/Source/Tests/UnitTests/GeoGen.ConfigurationGenerator.Tests/ConditionalLayoutsTest.cs
+@@ -0,0 +1,68 @@
++using GeoGen.Core;
++using GeoGen.Constructor;
++using GeoGen.ProblemGenerator;
++using NUnit.Framework;
++using Ninject;
++namespace GeoGen.ConfigurationGenerator.Tests;
++[TestFixture]
++public class ConditionalLayoutsTest
++{
++    [TestCase("Triangle: A, B, C", "EqualLineSegments: A, B, B, C",2)]
++    [TestCase("RightTriangle: A, B, C", "EqualLineSegments: A, B, A, C",1)]
++    [TestCase("Quadrilateral: A, B, C, D", "EqualLineSegments: A, B, B, C",4)]
++    [TestCase("CyclicQuadrilateral: A, B, C, D", "EqualLineSegments: A, B, B, C",3)]
++    [TestCase("LineAndTwoPoints: l, A, B", "ParallelLines: l, [A, B]",2)]
++    public void Samples_every_nonrigid_layout(string initial,string premise,int dimension)
++    {
++        var (_,_,_,kernel)=SoftSearchTest.Services();using(kernel){
++            var (configuration,names)=Parser.ParseConfiguration(new[]{initial});
++            var condition=Parser.ParseTheorem(premise,names,false);
++            var sampler=new ConditionalSampler(kernel.Get<IGeometryConstructor>(),configuration,new ConditionalSearchSettings{Starts=160});
++            Assert.That(sampler.Dimension,Is.EqualTo(dimension));
++            Assert.That(sampler.Generic(new Random(17),8).Count,Is.EqualTo(8));
++            var roots=sampler.On(condition,new Random(61));
++            Assert.That(roots.Count,Is.EqualTo(8));
++            Assert.That(roots.All(r=>ConditionalPredicate.Holds(r.Picture,condition)),Is.True);
++            Assert.That(roots.All(r=>r.Parameters.Length==dimension),Is.True);
++        }
++    }
++    [TestCase("LineSegment: A, B")]
++    [TestCase("LineAndPoint: l, A")]
++    public void Rigid_layouts_are_constructible_without_shape_freedom(string initial)
++    {
++        var (_,_,_,kernel)=SoftSearchTest.Services();using(kernel){
++            var (configuration,names)=Parser.ParseConfiguration(new[]{initial});
++            var sampler=new ConditionalSampler(kernel.Get<IGeometryConstructor>(),configuration,new ConditionalSearchSettings());
++            Assert.That(sampler.Dimension,Is.Zero);Assert.That(sampler.Generic(new Random(61),8).Count,Is.EqualTo(8));
++        }
++    }
++    [Test]
++    public void User_quadrilateral_story_is_constructible()
++    {
++        var (_,_,_,kernel)=SoftSearchTest.Services();using(kernel){
++            var (configuration,names)=Parser.ParseConfiguration(new[]{"Quadrilateral: A, B, C, D",
++                "P = IntersectionOfLinesFromPoints(A, C, B, D)",
++                "Q = SecondIntersectionOfTwoCircumcircles(P, A, B, C, D)",
++                "M = MidpointOfOppositeArc(B, A, P)","N = MidpointOfOppositeArc(C, D, P)"});
++            var sampler=new ConditionalSampler(kernel.Get<IGeometryConstructor>(),configuration,new ConditionalSearchSettings());
++            Assert.That(sampler.Generic(new Random(61),8).Count,Is.EqualTo(8));
++        }
++    }
++    [TestCase("RightTriangle: A, B, C", "EqualLineSegments: A, B, A, C", "PerpendicularLines: [A, B], [A, C]")]
++    [TestCase("CyclicQuadrilateral: A, B, C, D", "EqualLineSegments: A, B, B, C", "ConcyclicPoints: A, B, C, D")]
++    public void Extending_checks_the_intrinsic_layout_constraint(string initial,string premise,string goalText)
++    {
++        var (_,_,_,kernel)=SoftSearchTest.Services();using(kernel){
++            var (configuration,names)=Parser.ParseConfiguration(new[]{initial});
++            var condition=Parser.ParseTheorem(premise,names,false);var goal=Parser.ParseTheorem(goalText,names,false);
++            var constructor=kernel.Get<IGeometryConstructor>();
++            var sampler=new ConditionalSampler(constructor,configuration,new ConditionalSearchSettings());
++            var roots=sampler.On(condition,new Random(61));var generic=sampler.Generic(new Random(19),8);
++            var extender=new ConditionalExtender(constructor);
++            var result=extender.Check(configuration,condition,goal,roots,generic,o=>names.First(n=>n.Value.Equals(o)).Key,()=>{},5000);
++            Assert.That(result.TotalVariants,Is.EqualTo(1));Assert.That(result.Status,Is.EqualTo("accepted"));
++            Assert.That(result.Variants.Single().Object,Is.EqualTo("initial-layout"));
++            Assert.That(result.Variants.Single().Status,Is.EqualTo("counterexample"));
++        }
++    }
++}

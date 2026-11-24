@@ -1,0 +1,20 @@
+diff --git a/app/Functions.hs b/app/Functions.hs
+index 8edda96..3f60e57 100644
+--- a/app/Functions.hs
++++ b/app/Functions.hs
+@@ -762,9 +762,14 @@ cyclicQuadrilateral [a, b, c, d] =
+     , Command d [a, b, c] $ mkBuilder $ \x y z -> [rndPoint, rndPointOnCircle $ circumcircle x y z]
+     ]
+ 
++lineAndPoints :: [String] -> [Command]
++lineAndPoints (l:ps) = Command l [] (const [toShape <$> (line <$> rndPoint <*> rndPoint)]) : anyPolygon ps
++
+ initials :: Map.Map String ([String] -> [Command])
+ initials = Map.fromList
+-    [ ("Triangle", anyPolygon)
++    [ ("LineAndPoint", lineAndPoints)
++    , ("LineAndTwoPoints", lineAndPoints)
++    , ("Triangle", anyPolygon)
+     , ("RightTriangle", rightTriangle)
+     , ("LineSegment", anyPolygon)
+     , ("Quadrilateral", anyPolygon)

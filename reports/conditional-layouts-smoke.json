@@ -1,0 +1,190 @@
+{
+  "triangle": {
+    "truth": "accepted",
+    "extending": "accepted",
+    "haskell": "accepted",
+    "diagram": "passed"
+  },
+  "righttriangle": {
+    "truth": "accepted",
+    "extending": "rejected",
+    "haskell": "rejected",
+    "diagram": "passed"
+  },
+  "quadrilateral": {
+    "truth": "accepted",
+    "extending": "accepted",
+    "haskell": "accepted",
+    "diagram": "passed"
+  },
+  "cyclicquadrilateral": {
+    "truth": "accepted",
+    "extending": "rejected",
+    "haskell": "rejected",
+    "diagram": "passed"
+  },
+  "lineandtwopoints": {
+    "truth": "accepted",
+    "extending": "rejected",
+    "haskell": "rejected",
+    "diagram": "passed"
+  },
+  "triangle-centres-generation": "passed",
+  "righttriangle-generation": "passed",
+  "quadrilateral-generation": "passed",
+  "cyclicquadrilateral-generation": "passed",
+  "lineandtwopoints-generation": "passed",
+  "linesegment-generation": "passed",
+  "lineandpoint-generation": "passed",
+  "user-quadrilateral-generation": "passed",
+  "generationCounters": {
+    "generation-cyclicquadrilateral": {
+      "trace": {
+        "kind": "finish",
+        "seconds": 1.607045,
+        "Configurations": 2,
+        "Terminals": 2,
+        "ConditionsTried": 16,
+        "GenericConditions": 1,
+        "SolvedConditions": 3,
+        "FailedSampling": 12,
+        "Draws": 26876,
+        "SolverIterations": 3446,
+        "GoalsFound": 17,
+        "EssentialGoals": 3
+      },
+      "taskStates": {},
+      "noShapeFreedom": false
+    },
+    "generation-lineandpoint": {
+      "trace": {
+        "kind": "finish",
+        "seconds": 0.0159639,
+        "Configurations": 0,
+        "Terminals": 0,
+        "ConditionsTried": 0,
+        "GenericConditions": 0,
+        "SolvedConditions": 0,
+        "FailedSampling": 0,
+        "Draws": 0,
+        "SolverIterations": 0,
+        "GoalsFound": 0,
+        "EssentialGoals": 0
+      },
+      "taskStates": {},
+      "noShapeFreedom": true
+    },
+    "generation-lineandtwopoints": {
+      "trace": {
+        "kind": "finish",
+        "seconds": 0.374641,
+        "Configurations": 1,
+        "Terminals": 1,
+        "ConditionsTried": 6,
+        "GenericConditions": 2,
+        "SolvedConditions": 2,
+        "FailedSampling": 2,
+        "Draws": 543,
+        "SolverIterations": 104,
+        "GoalsFound": 10,
+        "EssentialGoals": 4
+      },
+      "taskStates": {},
+      "noShapeFreedom": false
+    },
+    "generation-linesegment": {
+      "trace": {
+        "kind": "finish",
+        "seconds": 0.0105758,
+        "Configurations": 0,
+        "Terminals": 0,
+        "ConditionsTried": 0,
+        "GenericConditions": 0,
+        "SolvedConditions": 0,
+        "FailedSampling": 0,
+        "Draws": 0,
+        "SolverIterations": 0,
+        "GoalsFound": 0,
+        "EssentialGoals": 0
+      },
+      "taskStates": {},
+      "noShapeFreedom": true
+    },
+    "generation-quadrilateral": {
+      "trace": {
+        "kind": "finish",
+        "seconds": 1.326511,
+        "Configurations": 2,
+        "Terminals": 2,
+        "ConditionsTried": 16,
+        "GenericConditions": 0,
+        "SolvedConditions": 8,
+        "FailedSampling": 8,
+        "Draws": 17197,
+        "SolverIterations": 1757,
+        "GoalsFound": 52,
+        "EssentialGoals": 18
+      },
+      "taskStates": {},
+      "noShapeFreedom": false
+    },
+    "generation-righttriangle": {
+      "trace": {
+        "kind": "finish",
+        "seconds": 2.1968934,
+        "Configurations": 3,
+        "Terminals": 3,
+        "ConditionsTried": 24,
+        "GenericConditions": 3,
+        "SolvedConditions": 2,
+        "FailedSampling": 19,
+        "Draws": 12522,
+        "SolverIterations": 2254,
+        "GoalsFound": 17,
+        "EssentialGoals": 5
+      },
+      "taskStates": {},
+      "noShapeFreedom": false
+    },
+    "generation-triangle-centres": {
+      "trace": {
+        "kind": "finish",
+        "seconds": 5.284947,
+        "Configurations": 2,
+        "Terminals": 2,
+        "ConditionsTried": 11,
+        "GenericConditions": 0,
+        "SolvedConditions": 6,
+        "FailedSampling": 5,
+        "Draws": 5284,
+        "SolverIterations": 932,
+        "GoalsFound": 159,
+        "EssentialGoals": 32
+      },
+      "taskStates": {
+        "unchecked": 27
+      },
+      "noShapeFreedom": false
+    },
+    "generation-user-quadrilateral": {
+      "trace": {
+        "kind": "finish",
+        "seconds": 5.4462103,
+        "Configurations": 3,
+        "Terminals": 2,
+        "ConditionsTried": 11,
+        "GenericConditions": 0,
+        "SolvedConditions": 6,
+        "FailedSampling": 5,
+        "Draws": 11207,
+        "SolverIterations": 1137,
+        "GoalsFound": 150,
+        "EssentialGoals": 20
+      },
+      "taskStates": {
+        "unchecked": 20
+      },
+      "noShapeFreedom": false
+    }
+  }
+}

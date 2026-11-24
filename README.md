@@ -1,5 +1,9 @@
 # GeoGen-Setuper — Linux-сборщик Geometry Suite
 
+Условный поиск поддерживает все семь стартовых типов. Параметризации,
+ограничения и пример четырёхугольника: [CONDITIONAL_SEARCH.md](CONDITIONAL_SEARCH.md).
+Проверки расширения: [CONDITIONAL_LAYOUTS_REPORT.md](CONDITIONAL_LAYOUTS_REPORT.md).
+
 В ветке feature/family-discovery доступен поиск на C#:
 исходный DFS и отсечение симметрии → точный локальный ранговый срез по числу теорем.
 При полном ранговом интервале [0,1] и keepOutsideTargetsPercent=100

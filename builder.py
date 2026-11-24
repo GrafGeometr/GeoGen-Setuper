@@ -326,6 +326,9 @@ class Builder:
         self.apply_source_patch(self.work / 'Geometry', HERE / 'patches/conditional-search-geometry.patch')
         self.apply_source_patch(self.work / 'GeoGen', HERE / 'patches/conditional-extending-geogen.patch')
         self.apply_source_patch(self.work / 'GeometryExtending', HERE / 'patches/conditional-extending-haskell.patch')
+        self.apply_source_patch(self.work / 'GeoGen', HERE / 'patches/conditional-layouts-geogen.patch')
+        self.apply_source_patch(self.work / 'Geometry', HERE / 'patches/conditional-layouts-geometry.patch')
+        self.apply_source_patch(self.work / 'GeometryExtending', HERE / 'patches/conditional-layouts-haskell.patch')
         check_metric_theorem_coverage(self.work)
         if self.stage.exists():
             shutil.rmtree(self.stage)
@@ -498,6 +501,7 @@ class Builder:
         shutil.copy2(HERE / 'CONDITIONAL_SEARCH.md', self.stage / 'CONDITIONAL_SEARCH.md')
         shutil.copy2(HERE / 'CONDITIONAL_EXTENDING.md', self.stage / 'CONDITIONAL_EXTENDING.md')
         shutil.copy2(HERE / 'CONDITIONAL_EXTENDING_REPORT.md', self.stage / 'CONDITIONAL_EXTENDING_REPORT.md')
+        shutil.copy2(HERE / 'CONDITIONAL_LAYOUTS_REPORT.md', self.stage / 'CONDITIONAL_LAYOUTS_REPORT.md')
         # A broken build must never replace the last working installation.
         self.run([sys.executable, self.stage / 'runtime.py', 'smoke', '--output', self.work / ('smoke-' + uuid.uuid4().hex[:8])], name='smoke')
         dest = self.args.output.resolve()

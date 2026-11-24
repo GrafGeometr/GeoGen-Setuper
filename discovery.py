@@ -141,7 +141,6 @@ def create(family_file, output, *, budget, search_workers=2, check_workers=2, ch
     atomic_text(output / 'family/catalog.json', json.dumps(catalog.data, ensure_ascii=False, indent=2))
     condition_path=os.environ.get('GEOGEN_CONDITIONS_CONFIG')
     if condition_path:
-        if any(story.layout!='Triangle' for story in family.stories):raise ValueError('Conditional search: Triangle only')
         atomic_text(output/'family/conditions-config.json',Path(condition_path).read_text())
     metadata = {'conditionalSearch':bool(condition_path),'kind': 'campaign', 'version': 1, 'phase': 'created', 'searchState': 'stopped',
                 'extraTheorems': [t for t in os.environ.get('GEOGEN_EXTRA_THEOREMS','').split(',') if t],
